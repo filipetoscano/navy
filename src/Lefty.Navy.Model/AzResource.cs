@@ -1,0 +1,55 @@
+﻿using System.Text.Json.Serialization;
+
+namespace Lefty.Navy.Model;
+
+/// <summary />
+/// <remarks>
+/// If a specialized class is not available, the placeholder base class
+/// will be used to represent the resource.
+/// </remarks>
+[JsonDerivedType( typeof( AzApiManagement ), nameof( AzApiManagement ) )]
+[JsonDerivedType( typeof( AzApplicationInsights ), nameof( AzApplicationInsights ) )]
+[JsonDerivedType( typeof( AzDatabricksConnector ), nameof( AzDatabricksConnector ) )]
+[JsonDerivedType( typeof( AzDatabricksWorkspace ), nameof( AzDatabricksWorkspace ) )]
+[JsonDerivedType( typeof( AzDiskEncryptionSet ), nameof( AzDiskEncryptionSet ) )]
+[JsonDerivedType( typeof( AzKeyVault ), nameof( AzKeyVault ) )]
+[JsonDerivedType( typeof( AzManagedIdentity ), nameof( AzManagedIdentity ) )]
+[JsonDerivedType( typeof( AzNetworkInterface ), nameof( AzNetworkInterface ) )]
+[JsonDerivedType( typeof( AzNetworkSecurityGroup ), nameof( AzNetworkSecurityGroup ) )]
+[JsonDerivedType( typeof( AzPrivateEndpoint ), nameof( AzPrivateEndpoint ) )]
+[JsonDerivedType( typeof( AzRouteTable ), nameof( AzRouteTable ) )]
+[JsonDerivedType( typeof( AzSqlDatabase ), nameof( AzSqlDatabase ) )]
+[JsonDerivedType( typeof( AzSqlServer ), nameof( AzSqlServer ) )]
+[JsonDerivedType( typeof( AzStorageAccount ), nameof( AzStorageAccount ) )]
+[JsonDerivedType( typeof( AzVirtualNetwork ), nameof( AzVirtualNetwork ) )]
+public class AzResource
+{
+    /// <summary />
+    public required string Id { get; set; }
+
+    /// <summary />
+    public required string Name { get; set; }
+
+    /// <summary />
+    public required string Type { get; set; }
+
+    /// <summary />
+    public required string Location { get; set; }
+
+    /// <summary />
+    public Dictionary<string, string> Tags { get; set; } = [];
+}
+
+
+/// <summary />
+public abstract class AzChildResource
+{
+    /// <summary />
+    public required string Id { get; set; }
+
+    /// <summary />
+    public required string Name { get; set; }
+
+    /// <summary />
+    public required string Type { get; set; }
+}

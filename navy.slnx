@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/cicd/">
+    <File Path=".github/workflows/ci.yml" />
+    <File Path=".github/workflows/release.yml" />
+    <File Path="cicd/ci.sh" />
+    <File Path="cicd/release.sh" />
+  </Folder>
+  <Folder Name="/sln/">
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Lefty.Navy.Azure/Lefty.Navy.Azure.csproj" />
+    <Project Path="src/Lefty.Navy.Model/Lefty.Navy.Model.csproj" Id="833c0e6c-d46a-4c75-af6f-3c405d897f32" />
+    <Project Path="src/Lefty.Navy/Lefty.Navy.csproj" />
+  </Folder>
+</Solution>
