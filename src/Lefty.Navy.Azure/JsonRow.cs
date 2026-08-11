@@ -61,6 +61,30 @@ internal static class JsonRow
 
 
     /// <summary />
+    public static long Long( this JsonElement element, string name )
+    {
+        var value = element.Obj( name );
+
+        if ( value.ValueKind != JsonValueKind.Number )
+            return 0;
+
+        return value.TryGetInt64( out var number ) == true ? number : 0;
+    }
+
+
+    /// <summary />
+    public static DateTimeOffset? Moment( this JsonElement element, string name )
+    {
+        var value = element.Obj( name );
+
+        if ( value.ValueKind != JsonValueKind.String )
+            return null;
+
+        return value.TryGetDateTimeOffset( out var moment ) == true ? moment : null;
+    }
+
+
+    /// <summary />
     public static List<string> StrList( this JsonElement element, string name )
     {
         var list = new List<string>();

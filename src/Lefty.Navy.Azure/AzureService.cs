@@ -58,7 +58,13 @@ public class AzureService
     /// <param name="subscriptionName">
     /// Name of the subscription, or its identifier. Matched case-insensitively.
     /// </param>
-    public async Task<AzSubscription> SubscriptionGet( string subscriptionName )
+    /// <param name="stitch">
+    /// Whether to resolve the identifiers which resources hold to one another
+    /// into references to the objects themselves. The identifiers are populated
+    /// either way; leaving them unresolved keeps the result a strict tree, in
+    /// which nothing is reachable by more than one path.
+    /// </param>
+    public async Task<AzSubscription> SubscriptionGet( string subscriptionName, bool stitch )
     {
         using var query = new ResourceGraphQuery( _client, _logger );
 
@@ -132,7 +138,10 @@ public class AzureService
         /*
          * Resolve references only once every resource is known.
          */
-        new ResourceLinker( _logger ).Link( resources );
+        if ( stitch == true )
+            new ResourceLinker( _logger ).Link( resources );
+        else
+            _logger.LogDebug( "references between resources left unresolved" );
 
         return new AzSubscription
         {

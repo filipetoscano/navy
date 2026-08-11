@@ -34,11 +34,22 @@ public class BuildCommand
 
 
     /// <summary />
+    /// <remarks>
+    /// Without stitching the inventory is a strict tree: each resource appears
+    /// exactly once, and references to other resources are reported as
+    /// identifiers rather than being followed. Stitching resolves them, at the
+    /// cost of writing a resource out once per path which reaches it.
+    /// </remarks>
+    [Option( "--no-stitch", CommandOptionType.NoValue, Description = "Report references between resources as identifiers, without resolving them" )]
+    public bool NoStitch { get; set; }
+
+
+    /// <summary />
     public async Task<int> OnExecuteAsync()
     {
         try
         {
-            var sub = await _svc.SubscriptionGet( this.Subscription! );
+            var sub = await _svc.SubscriptionGet( this.Subscription!, this.NoStitch == false );
 
             var json = JsonSerializer.Serialize( sub, Options );
             Console.WriteLine( json );
@@ -47,7 +58,7 @@ public class BuildCommand
         }
         catch ( AzureServiceException ex )
         {
-            _logger.LogError( "{Message}", ex.Message );
+            _logger.LogError( ex, "{Message}", ex.Message );
 
             return 1;
         }

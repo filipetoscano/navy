@@ -32,6 +32,9 @@ public class ResourceMapper
     /// <summary />
     private const string ConnectionType = "Microsoft.Network/privateEndpoints/privateLinkServiceConnections";
 
+    /// <summary />
+    private const string RouteType = "Microsoft.Network/routeTables/routes";
+
     private readonly ILogger _logger;
 
 
@@ -56,7 +59,10 @@ public class ResourceMapper
             "microsoft.keyvault/vaults" => MapKeyVault( row ),
             "microsoft.network/networkinterfaces" => MapNetworkInterface( row ),
             "microsoft.network/privateendpoints" => MapPrivateEndpoint( row ),
+            "microsoft.network/routetables" => MapRouteTable( row ),
             "microsoft.network/virtualnetworks" => MapVirtualNetwork( row ),
+            "microsoft.sql/servers" => MapSqlServer( row ),
+            "microsoft.sql/servers/databases" => MapSqlDatabase( row ),
             "microsoft.storage/storageaccounts" => MapStorageAccount( row ),
 
             /*
@@ -70,9 +76,6 @@ public class ResourceMapper
             "microsoft.insights/components" => Basic<AzApplicationInsights>( row ),
             "microsoft.managedidentity/userassignedidentities" => Basic<AzManagedIdentity>( row ),
             "microsoft.network/networksecuritygroups" => Basic<AzNetworkSecurityGroup>( row ),
-            "microsoft.network/routetables" => Basic<AzRouteTable>( row ),
-            "microsoft.sql/servers" => Basic<AzSqlServer>( row ),
-            "microsoft.sql/servers/databases" => Basic<AzSqlDatabase>( row ),
 
             _ => Basic<AzResource>( row ),
         };
@@ -126,6 +129,130 @@ public class ResourceMapper
         }
 
         return service;
+    }
+
+
+    /// <summary />
+    private static AzResource MapRouteTable( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var table = Basic<AzRouteTable>( row );
+
+        table.DisableBgpRoutePropagation = properties.Bool( "disableBgpRoutePropagation" );
+        table.ProvisioningState = properties.Str( "provisioningState" );
+
+        foreach ( var item in properties.Items( "routes" ) )
+        {
+            var route = item.Obj( "properties" );
+
+            table.Routes.Add( new AzRoute
+            {
+                Id = item.Str( "id" ) ?? "",
+                Name = item.Str( "name" ) ?? "",
+                Type = item.Str( "type" ) ?? RouteType,
+                AddressPrefix = route.Str( "addressPrefix" ),
+                NextHopType = route.Str( "nextHopType" ),
+                NextHopIpAddress = route.Str( "nextHopIpAddress" ),
+                HasBgpOverride = route.Bool( "hasBgpOverride" ),
+            } );
+        }
+
+        foreach ( var subnet in properties.Items( "subnets" ) )
+        {
+            var id = subnet.Str( "id" );
+
+            if ( id != null )
+                table.SubnetIds.Add( id );
+        }
+
+        return table;
+    }
+
+
+    /// <summary />
+    private static AzResource MapSqlServer( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var server = Basic<AzSqlServer>( row );
+
+        server.Version = properties.Str( "version" );
+        server.State = properties.Str( "state" );
+        server.FullyQualifiedDomainName = properties.Str( "fullyQualifiedDomainName" );
+        server.AdministratorLogin = properties.Str( "administratorLogin" );
+
+        var administrators = properties.Obj( "administrators" );
+
+        server.EntraAdministratorLogin = administrators.Str( "login" );
+        server.EntraAdministratorPrincipalType = administrators.Str( "principalType" );
+        server.EntraAdministratorObjectId = administrators.Str( "sid" );
+        server.EntraOnlyAuthentication = administrators.Bool( "azureADOnlyAuthentication" );
+
+        server.PublicNetworkAccess = properties.Str( "publicNetworkAccess" );
+        server.MinimalTlsVersion = properties.Str( "minimalTlsVersion" );
+        server.RestrictOutboundNetworkAccess = properties.Str( "restrictOutboundNetworkAccess" );
+        server.ExternalGovernanceStatus = properties.Str( "externalGovernanceStatus" );
+        server.PrimaryUserAssignedIdentityId = properties.Str( "primaryUserAssignedIdentityId" );
+
+        foreach ( var connection in properties.Items( "privateEndpointConnections" ) )
+        {
+            var id = connection.Obj( "properties" ).Obj( "privateEndpoint" ).Str( "id" );
+
+            if ( id != null )
+                server.PrivateEndpointIds.Add( id );
+        }
+
+        return server;
+    }
+
+
+    /// <summary />
+    private static AzResource MapSqlDatabase( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var database = Basic<AzSqlDatabase>( row );
+
+        database.ServerId = ParentOf( database.Id, "/databases/" );
+        database.Kind = row.Str( "kind" );
+        database.DatabaseId = properties.Str( "databaseId" );
+        database.Status = properties.Str( "status" );
+
+        database.Sku = row.Obj( "sku" ).Str( "name" );
+        database.SkuTier = row.Obj( "sku" ).Str( "tier" );
+        database.SkuCapacity = row.Obj( "sku" ).Int( "capacity" );
+        database.CurrentServiceObjectiveName = properties.Str( "currentServiceObjectiveName" );
+        database.RequestedServiceObjectiveName = properties.Str( "requestedServiceObjectiveName" );
+        database.ElasticPoolId = properties.Str( "elasticPoolId" );
+        database.LicenseType = properties.Str( "licenseType" );
+
+        database.MaxSizeBytes = properties.Long( "maxSizeBytes" );
+        database.Collation = properties.Str( "collation" );
+        database.CatalogCollation = properties.Str( "catalogCollation" );
+
+        database.ZoneRedundant = properties.Bool( "zoneRedundant" );
+        database.AvailabilityZone = properties.Str( "availabilityZone" );
+        database.ReadScale = properties.Str( "readScale" );
+        database.RequestedBackupStorageRedundancy = properties.Str( "requestedBackupStorageRedundancy" );
+        database.CurrentBackupStorageRedundancy = properties.Str( "currentBackupStorageRedundancy" );
+
+        database.IsLedgerOn = properties.Bool( "isLedgerOn" );
+        database.IsInfraEncryptionEnabled = properties.Bool( "isInfraEncryptionEnabled" );
+        database.CreationDate = properties.Moment( "creationDate" );
+        database.EarliestRestoreDate = properties.Moment( "earliestRestoreDate" );
+
+        return database;
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// A child resource carries its parent within its own identifier, which is
+    /// the only place the relationship is reported.
+    /// </remarks>
+    private static string? ParentOf( string id, string separator )
+    {
+        var at = id.LastIndexOf( separator, StringComparison.OrdinalIgnoreCase );
+
+        return at < 0 ? null : id[ ..at ];
     }
 
 
