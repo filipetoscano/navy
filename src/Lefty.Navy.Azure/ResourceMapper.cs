@@ -84,9 +84,12 @@ public class ResourceMapper
              */
             "microsoft.alertsmanagement/smartdetectoralertrules" => MapSmartDetectorAlertRule( row ),
             "microsoft.apimanagement/service" => MapApiManagement( row ),
+            "microsoft.cache/redis" => MapCacheForRedis( row ),
             "microsoft.compute/diskencryptionsets" => MapDiskEncryptionSet( row ),
+            "microsoft.compute/virtualmachines" => MapVirtualMachine( row ),
             "microsoft.compute/virtualmachinescalesets" => MapVirtualMachineScaleSet( row ),
             "microsoft.containerservice/managedclusters" => MapKubernetesService( row ),
+            "microsoft.eventhub/namespaces" => MapEventHubNamespace( row ),
             "microsoft.insights/actiongroups" => MapActionGroup( row ),
             "microsoft.insights/activitylogalerts" => MapActivityLogAlertRule( row ),
             "microsoft.insights/components" => MapApplicationInsights( row ),
@@ -105,6 +108,13 @@ public class ResourceMapper
             "microsoft.sql/servers" => MapSqlServer( row ),
             "microsoft.sql/servers/databases" => MapSqlDatabase( row ),
             "microsoft.storage/storageaccounts" => MapStorageAccount( row ),
+
+            /*
+             * The one type which is not enough on its own to say what the
+             * resource is: a site is told apart from a function app only by its
+             * kind.
+             */
+            "microsoft.web/sites" => MapWebSite( row ),
 
             /*
              * Types which are modelled, but carry no properties beyond the
@@ -1233,6 +1243,328 @@ public class ResourceMapper
         }
 
         return balancer;
+    }
+
+
+    /// <summary />
+    private static AzResource MapVirtualMachine( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var machine = Basic<AzVirtualMachine>( row );
+
+        machine.VmId = properties.Str( "vmId" );
+        machine.VmSize = properties.Obj( "hardwareProfile" ).Str( "vmSize" );
+        machine.ProvisioningState = properties.Str( "provisioningState" );
+        machine.TimeCreated = properties.Moment( "timeCreated" );
+        machine.Priority = properties.Str( "priority" );
+        machine.LicenseType = properties.Str( "licenseType" );
+
+        /*
+         * The instance view is what the machine is doing rather than how it was
+         * asked to be. Resource Graph folds it into the properties of a virtual
+         * machine, which is the only type it does this for.
+         */
+        var instance = properties.Obj( "extended" ).Obj( "instanceView" );
+
+        machine.PowerState = instance.Obj( "powerState" ).Str( "code" );
+        machine.OsName = instance.Str( "osName" );
+        machine.OsVersion = instance.Str( "osVersion" );
+        machine.HyperVGeneration = instance.Str( "hyperVGeneration" );
+
+        var os = properties.Obj( "osProfile" );
+
+        machine.ComputerName = os.Str( "computerName" );
+        machine.AdminUsername = os.Str( "adminUsername" );
+        machine.DisablePasswordAuthentication = os.Obj( "linuxConfiguration" ).Bool( "disablePasswordAuthentication" );
+
+        /*
+         * Patching is configured per operating system, in whichever of the two
+         * configurations applies.
+         */
+        machine.PatchMode = os.Obj( "windowsConfiguration" ).Obj( "patchSettings" ).Str( "patchMode" )
+            ?? os.Obj( "linuxConfiguration" ).Obj( "patchSettings" ).Str( "patchMode" );
+
+        var security = properties.Obj( "securityProfile" );
+
+        machine.SecurityType = security.Str( "securityType" );
+        machine.EncryptionAtHost = security.Bool( "encryptionAtHost" );
+        machine.SecureBootEnabled = security.Obj( "uefiSettings" ).Bool( "secureBootEnabled" );
+        machine.VTpmEnabled = security.Obj( "uefiSettings" ).Bool( "vTpmEnabled" );
+        machine.BootDiagnosticsEnabled = properties.Obj( "diagnosticsProfile" ).Obj( "bootDiagnostics" ).Bool( "enabled" );
+
+        var storage = properties.Obj( "storageProfile" );
+        var image = storage.Obj( "imageReference" );
+
+        machine.ImageReferenceId = image.Str( "id" );
+
+        if ( image.Str( "publisher" ) != null )
+        {
+            machine.ImageReference = string.Join( ":",
+                image.Str( "publisher" ), image.Str( "offer" ), image.Str( "sku" ), image.Str( "version" ) );
+        }
+
+        var osDisk = storage.Obj( "osDisk" );
+
+        if ( osDisk.ValueKind == JsonValueKind.Object )
+        {
+            machine.OsDisk = Disk( osDisk );
+            machine.OsType = osDisk.Str( "osType" );
+            machine.DiskEncryptionSetId = machine.OsDisk.DiskEncryptionSetId;
+        }
+
+        foreach ( var item in storage.Items( "dataDisks" ) )
+            machine.DataDisks.Add( Disk( item ) );
+
+        machine.AvailabilitySetId = properties.Obj( "availabilitySet" ).Str( "id" );
+        machine.VirtualMachineScaleSetId = properties.Obj( "virtualMachineScaleSet" ).Str( "id" );
+        machine.NetworkInterfaceIds = IdList( properties.Obj( "networkProfile" ), "networkInterfaces" );
+
+        return machine;
+    }
+
+
+    /// <summary />
+    private static AzVirtualMachineDisk Disk( JsonElement item )
+    {
+        var managed = item.Obj( "managedDisk" );
+
+        return new AzVirtualMachineDisk
+        {
+            Name = item.Str( "name" ) ?? "",
+            ManagedDiskId = managed.Str( "id" ),
+            Lun = item.Int( "lun" ),
+            DiskSizeGB = item.Int( "diskSizeGB" ),
+            StorageAccountType = managed.Str( "storageAccountType" ),
+            Caching = item.Str( "caching" ),
+            DeleteOption = item.Str( "deleteOption" ),
+            DiskEncryptionSetId = managed.Obj( "diskEncryptionSet" ).Str( "id" ),
+            WriteAcceleratorEnabled = item.Bool( "writeAcceleratorEnabled" ),
+        };
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// Function apps, logic apps and web apps are all
+    /// <c>Microsoft.Web/sites</c>, and the kind is the only thing which tells
+    /// them apart. A Standard logic app reports itself as
+    /// <c>functionapp,workflowapp</c>, and so is mapped as a function app which
+    /// knows it is a workflow.
+    /// </remarks>
+    private static AzResource MapWebSite( JsonElement row )
+    {
+        var kind = row.Str( "kind" ) ?? "";
+
+        if ( kind.Contains( "functionapp", StringComparison.OrdinalIgnoreCase ) == false )
+            return MapAppService( row );
+
+        var properties = row.Obj( "properties" );
+        var configuration = properties.Obj( "siteConfig" );
+        var app = Basic<AzFunctionApp>( row );
+
+        WebSite( app, row );
+
+        app.IsWorkflowApp = kind.Contains( "workflowapp", StringComparison.OrdinalIgnoreCase );
+        app.ContainerSize = properties.Int( "containerSize" );
+        app.DailyMemoryTimeQuota = properties.Long( "dailyMemoryTimeQuota" );
+        app.FunctionAppScaleLimit = configuration.Int( "functionAppScaleLimit" );
+        app.MinimumElasticInstanceCount = configuration.Int( "minimumElasticInstanceCount" );
+
+        return app;
+    }
+
+
+    /// <summary />
+    private static AzResource MapAppService( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var site = Basic<AzAppService>( row );
+
+        WebSite( site, row );
+
+        site.ClientAffinityEnabled = properties.Bool( "clientAffinityEnabled" );
+        site.NumberOfWorkers = properties.Obj( "siteConfig" ).Int( "numberOfWorkers" );
+        site.RedundancyMode = properties.Str( "redundancyMode" );
+        site.HostNamesDisabled = properties.Bool( "hostNamesDisabled" );
+
+        return site;
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// What every kind of site reports. The runtime stack is recorded in one of
+    /// two fields depending on the operating system, and only ever one of them
+    /// is set.
+    /// </remarks>
+    private static void WebSite( AzWebSite site, JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var configuration = properties.Obj( "siteConfig" );
+
+        site.Kind = row.Str( "kind" );
+        site.State = properties.Str( "state" );
+        site.Enabled = properties.Bool( "enabled" );
+        site.IsLinux = properties.Bool( "reserved" );
+
+        site.DefaultHostName = properties.Str( "defaultHostName" );
+        site.HostNames = properties.StrList( "hostNames" );
+        site.HttpsOnly = properties.Bool( "httpsOnly" );
+        site.ClientCertEnabled = properties.Bool( "clientCertEnabled" );
+        site.ClientCertMode = properties.Str( "clientCertMode" );
+        site.PublicNetworkAccess = properties.Str( "publicNetworkAccess" );
+
+        site.MinTlsVersion = configuration.Str( "minTlsVersion" );
+        site.FtpsState = configuration.Str( "ftpsState" );
+        site.Http20Enabled = configuration.Bool( "http20Enabled" );
+        site.AlwaysOn = configuration.Bool( "alwaysOn" );
+        site.RuntimeStack = configuration.Str( "linuxFxVersion" ) ?? configuration.Str( "netFrameworkVersion" );
+
+        site.ServerFarmId = properties.Str( "serverFarmId" );
+        site.VirtualNetworkSubnetId = properties.Str( "virtualNetworkSubnetId" );
+        site.VnetRouteAllEnabled = properties.Bool( "vnetRouteAllEnabled" );
+        site.OutboundIpAddresses = properties.Str( "outboundIpAddresses" );
+
+        foreach ( var connection in properties.Items( "privateEndpointConnections" ) )
+        {
+            var id = connection.Obj( "properties" ).Obj( "privateEndpoint" ).Str( "id" );
+
+            if ( id != null )
+                site.PrivateEndpointIds.Add( id );
+        }
+    }
+
+
+    /// <summary />
+    private static AzResource MapCacheForRedis( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var cache = Basic<AzCacheForRedis>( row );
+
+        /*
+         * The sku is inside the properties here, and the sku column of the
+         * resources table is null: the one type which does this.
+         */
+        var sku = properties.Obj( "sku" );
+
+        cache.Sku = sku.Str( "name" );
+        cache.SkuFamily = sku.Str( "family" );
+        cache.SkuCapacity = sku.Int( "capacity" );
+
+        cache.ProvisioningState = properties.Str( "provisioningState" );
+        cache.RedisVersion = properties.Str( "redisVersion" );
+        cache.UpdateChannel = properties.Str( "updateChannel" );
+
+        cache.HostName = properties.Str( "hostName" );
+        cache.Port = properties.Int( "port" );
+        cache.SslPort = properties.Int( "sslPort" );
+        cache.EnableNonSslPort = properties.Bool( "enableNonSslPort" );
+        cache.MinimumTlsVersion = properties.Str( "minimumTlsVersion" );
+        cache.PublicNetworkAccess = properties.Str( "publicNetworkAccess" );
+        cache.DisableAccessKeyAuthentication = properties.Bool( "disableAccessKeyAuthentication" );
+
+        /*
+         * replicasPerMaster is the older name for the same number, and is the
+         * only one an Enterprise cache reports.
+         */
+        cache.ReplicasPerPrimary = properties.Int( "replicasPerPrimary" ) is var replicas && replicas != 0
+            ? replicas : properties.Int( "replicasPerMaster" );
+
+        cache.ShardCount = properties.Int( "shardCount" );
+        cache.ZonalAllocationPolicy = properties.Str( "zonalAllocationPolicy" );
+
+        /*
+         * Every value in the configuration is a string, whether it is a number
+         * or a flag. Only the settings named here are taken: the same object
+         * carries the storage connection string a backup is written with, and
+         * that holds an account key.
+         */
+        var configuration = properties.Obj( "redisConfiguration" );
+
+        cache.MaxMemoryPolicy = configuration.Str( "maxmemory-policy" );
+        cache.MaxMemoryReservedMB = Number( configuration, "maxmemory-reserved" );
+        cache.MaxFragmentationMemoryReservedMB = Number( configuration, "maxfragmentationmemory-reserved" );
+        cache.MaxClients = Number( configuration, "maxclients" );
+        cache.AadEnabled = Flag( configuration, "aad-enabled" );
+        cache.RdbBackupEnabled = Flag( configuration, "rdb-backup-enabled" );
+        cache.AofBackupEnabled = Flag( configuration, "aof-backup-enabled" );
+
+        cache.SubnetId = properties.Str( "subnetId" );
+        cache.StaticIP = properties.Str( "staticIP" );
+
+        foreach ( var linked in properties.Items( "linkedServers" ) )
+        {
+            var id = linked.Str( "id" );
+
+            if ( id != null )
+                cache.LinkedServerIds.Add( id );
+        }
+
+        foreach ( var connection in properties.Items( "privateEndpointConnections" ) )
+        {
+            var id = connection.Obj( "properties" ).Obj( "privateEndpoint" ).Str( "id" );
+
+            if ( id != null )
+                cache.PrivateEndpointIds.Add( id );
+        }
+
+        return cache;
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// A number which Redis reports as a string.
+    /// </remarks>
+    private static int Number( JsonElement element, string name )
+    {
+        return int.TryParse( element.Str( name ), out var number ) == true ? number : 0;
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// A flag which Redis reports as the string true or false.
+    /// </remarks>
+    private static bool Flag( JsonElement element, string name )
+    {
+        return string.Equals( element.Str( name ), "true", StringComparison.OrdinalIgnoreCase );
+    }
+
+
+    /// <summary />
+    private static AzResource MapEventHubNamespace( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var space = Basic<AzEventHubNamespace>( row );
+
+        space.Sku = row.Obj( "sku" ).Str( "name" );
+        space.SkuTier = row.Obj( "sku" ).Str( "tier" );
+        space.SkuCapacity = row.Obj( "sku" ).Int( "capacity" );
+
+        space.ProvisioningState = properties.Str( "provisioningState" );
+        space.Status = properties.Str( "status" );
+        space.CreatedAt = properties.Moment( "createdAt" );
+
+        space.ServiceBusEndpoint = properties.Str( "serviceBusEndpoint" );
+        space.KafkaEnabled = properties.Bool( "kafkaEnabled" );
+        space.IsAutoInflateEnabled = properties.Bool( "isAutoInflateEnabled" );
+        space.MaximumThroughputUnits = properties.Int( "maximumThroughputUnits" );
+        space.ZoneRedundant = properties.Bool( "zoneRedundant" );
+
+        space.DisableLocalAuth = properties.Bool( "disableLocalAuth" );
+        space.MinimumTlsVersion = properties.Str( "minimumTlsVersion" );
+        space.PublicNetworkAccess = properties.Str( "publicNetworkAccess" );
+
+        foreach ( var connection in properties.Items( "privateEndpointConnections" ) )
+        {
+            var id = connection.Obj( "properties" ).Obj( "privateEndpoint" ).Str( "id" );
+
+            if ( id != null )
+                space.PrivateEndpointIds.Add( id );
+        }
+
+        return space;
     }
 
 

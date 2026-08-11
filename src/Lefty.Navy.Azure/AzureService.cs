@@ -127,12 +127,17 @@ public class AzureService
 
 
         /*
-         * Storage account contents are not indexed by Resource Graph, and have
-         * to be read from the management plane one account at a time.
+         * Storage account contents and the hubs of an Event Hubs namespace are
+         * not indexed by Resource Graph, and have to be read from the
+         * management plane one resource at a time.
          */
         var accounts = resources.OfType<AzStorageAccount>().ToList();
 
         await new StorageEnricher( _client, _logger ).Enrich( accounts );
+
+        var namespaces = resources.OfType<AzEventHubNamespace>().ToList();
+
+        await new EventHubEnricher( _client, _logger ).Enrich( namespaces );
 
 
         /*

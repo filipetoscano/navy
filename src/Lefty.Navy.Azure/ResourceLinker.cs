@@ -15,10 +15,12 @@ namespace Lefty.Navy.Azure;
 /// would turn the graph cyclic and make serialization fail on depth.
 /// </para>
 /// <para>
-/// Azure describes two of these relationships from both ends, and in each case
-/// only one end is resolved here. A private endpoint holds its network
-/// interfaces, so <see cref="AzNetworkInterface.PrivateEndpointId" /> stays an
-/// identifier; and a resource such as a key vault or a storage account holds
+/// Azure describes several of these relationships from both ends, and in each
+/// case only one end is resolved here. A private endpoint and a virtual machine
+/// each hold their network interfaces, so
+/// <see cref="AzNetworkInterface.PrivateEndpointId" /> and
+/// <see cref="AzNetworkInterface.VirtualMachineId" /> stay identifiers; and a
+/// resource such as a key vault or a storage account holds
 /// the endpoints which front it, so
 /// <see cref="AzPrivateEndpointConnection.PrivateLinkServiceId" /> stays an
 /// identifier too. Resolving either would close a loop. The same holds for a
@@ -35,6 +37,11 @@ namespace Lefty.Navy.Azure;
 /// placed into, stay identifiers because a subscription holds far more rules
 /// and scale sets than it holds watched resources and balancers: resolving
 /// them would write a copy of the target under each one.
+/// </para>
+/// <para>
+/// Geo-replicated Redis caches name each other, so
+/// <see cref="AzCacheForRedis.LinkedServerIds" /> stays a list of identifiers:
+/// resolving it would close a loop between the pair.
 /// </para>
 /// <para>
 /// A resolved object is shared rather than copied, so a subnet reached through
@@ -171,6 +178,56 @@ public class ResourceLinker
             {
                 foreach ( var frontend in balancer.FrontendIPConfigurations )
                     frontend.Subnet = SubnetLookup( subnetsById, frontend.SubnetId );
+            }
+
+            if ( resource is AzVirtualMachine machine )
+            {
+                machine.DiskEncryptionSet = Lookup<AzDiskEncryptionSet>( byId, machine.DiskEncryptionSetId );
+
+                foreach ( var id in machine.NetworkInterfaceIds )
+                {
+                    var attached = Lookup<AzNetworkInterface>( byId, id );
+
+                    if ( attached != null )
+                        machine.NetworkInterfaces.Add( attached );
+                }
+            }
+
+            if ( resource is AzWebSite site )
+            {
+                site.Subnet = SubnetLookup( subnetsById, site.VirtualNetworkSubnetId );
+
+                foreach ( var id in site.PrivateEndpointIds )
+                {
+                    var linked = Lookup<AzPrivateEndpoint>( byId, id );
+
+                    if ( linked != null )
+                        site.PrivateEndpoints.Add( linked );
+                }
+            }
+
+            if ( resource is AzCacheForRedis cache )
+            {
+                cache.Subnet = SubnetLookup( subnetsById, cache.SubnetId );
+
+                foreach ( var id in cache.PrivateEndpointIds )
+                {
+                    var linked = Lookup<AzPrivateEndpoint>( byId, id );
+
+                    if ( linked != null )
+                        cache.PrivateEndpoints.Add( linked );
+                }
+            }
+
+            if ( resource is AzEventHubNamespace space )
+            {
+                foreach ( var id in space.PrivateEndpointIds )
+                {
+                    var linked = Lookup<AzPrivateEndpoint>( byId, id );
+
+                    if ( linked != null )
+                        space.PrivateEndpoints.Add( linked );
+                }
             }
 
             if ( resource is AzNetAppAccount netApp )

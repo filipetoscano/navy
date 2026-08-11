@@ -10,6 +10,7 @@
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Azure.ResourceManager" Version="1.14.0" />
     <PackageReference Include="Azure.ResourceManager.Authorization" Version="1.1.7" />
+    <PackageReference Include="Azure.ResourceManager.EventHubs" Version="1.1.0" />
     <PackageReference Include="Azure.ResourceManager.ManagedServiceIdentities" Version="1.4.1" />
     <PackageReference Include="Azure.ResourceManager.Network" Version="1.16.1" />
     <PackageReference Include="Azure.ResourceManager.ResourceGraph" Version="1.1.1" />

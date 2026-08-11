@@ -200,6 +200,9 @@ public class ResourceMapperTest
     [InlineData( "Microsoft.AlertsManagement/smartDetectorAlertRules", typeof( AzSmartDetectorAlertRule ) )]
     [InlineData( "Microsoft.ContainerService/managedClusters", typeof( AzKubernetesService ) )]
     [InlineData( "Microsoft.Compute/virtualMachineScaleSets", typeof( AzVirtualMachineScaleSet ) )]
+    [InlineData( "Microsoft.Compute/virtualMachines", typeof( AzVirtualMachine ) )]
+    [InlineData( "Microsoft.Cache/Redis", typeof( AzCacheForRedis ) )]
+    [InlineData( "Microsoft.EventHub/namespaces", typeof( AzEventHubNamespace ) )]
     [InlineData( "Microsoft.Network/loadBalancers", typeof( AzLoadBalancer ) )]
     [InlineData( "Microsoft.NetApp/netAppAccounts", typeof( AzNetAppAccount ) )]
     [InlineData( "Microsoft.NetApp/netAppAccounts/capacityPools", typeof( AzNetAppCapacityPool ) )]
@@ -223,24 +226,30 @@ public class ResourceMapperTest
 
 
     /// <summary />
+    /// <remarks>
+    /// Most of a subscription is types nobody has modelled yet, and they have
+    /// to survive the inventory rather than be dropped from it. This needs a
+    /// type the mapper does not know: whoever comes to model network watchers
+    /// will have to point it at something else.
+    /// </remarks>
     [Fact]
     public void UnknownType_FallsBackToBase()
     {
         var row = Row( """
             {
-              "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Web/sites/app-one",
-              "name": "app-one",
-              "type": "Microsoft.Web/sites",
+              "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/networkWatchers/nw-one",
+              "name": "nw-one",
+              "type": "Microsoft.Network/networkWatchers",
               "location": "westeurope",
-              "properties": { "state": "Running" }
+              "properties": { "provisioningState": "Succeeded" }
             }
             """ );
 
         var resource = Mapper.Map( row );
 
         Assert.Equal( typeof( AzResource ), resource.GetType() );
-        Assert.Equal( "app-one", resource.Name );
-        Assert.Equal( "Microsoft.Web/sites", resource.Type );
+        Assert.Equal( "nw-one", resource.Name );
+        Assert.Equal( "Microsoft.Network/networkWatchers", resource.Type );
     }
 
 

@@ -40,8 +40,10 @@ public class AzNetworkInterface : AzResource
 
     /// <summary />
     /// <remarks>
-    /// Set for an interface attached to a virtual machine. Virtual machines are
-    /// not modelled, so this does not resolve.
+    /// Set for an interface attached to a virtual machine. Deliberately not
+    /// resolved: the machine already holds its interfaces, and resolving both
+    /// directions would make the graph cyclic and serialization
+    /// non-terminating.
     /// </remarks>
     public string? VirtualMachineId { get; set; }
 
