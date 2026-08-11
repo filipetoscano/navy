@@ -64,11 +64,15 @@ public class AzureService
     /// either way; leaving them unresolved keeps the result a strict tree, in
     /// which nothing is reachable by more than one path.
     /// </param>
-    public async Task<AzSubscription> SubscriptionGet( string subscriptionName, bool stitch )
+    /// <param name="cancellationToken">
+    /// Cancelling abandons the inventory rather than returning a partial one:
+    /// the exception propagates, and whatever had been read is discarded.
+    /// </param>
+    public async Task<AzSubscription> SubscriptionGetAsync( string subscriptionName, bool stitch, CancellationToken cancellationToken = default )
     {
         using var query = new ResourceGraphQuery( _client, _logger );
 
-        var subscription = await SubscriptionResolve( query, subscriptionName );
+        var subscription = await SubscriptionResolve( query, subscriptionName, cancellationToken );
         var subscriptionId = subscription.Str( "subscriptionId" )!;
 
         _logger.LogInformation( "reading subscription {Name} ({Id})", subscription.Str( "name" ), subscriptionId );
@@ -77,7 +81,7 @@ public class AzureService
         /*
          * Resource groups first, so that resources have somewhere to be placed.
          */
-        var groupRows = await query.Execute( "resourcegroups", ResourceGroupQuery, subscriptionId );
+        var groupRows = await query.Execute( "resourcegroups", ResourceGroupQuery, subscriptionId, cancellationToken );
 
         var groups = new List<AzResourceGroup>();
         var groupsByName = new Dictionary<string, AzResourceGroup>( StringComparer.OrdinalIgnoreCase );
@@ -101,7 +105,7 @@ public class AzureService
          * Resources, placed into their group by name: the resources table
          * reports the group name rather than its identifier.
          */
-        var resourceRows = await query.Execute( "resources", ResourceQuery, subscriptionId );
+        var resourceRows = await query.Execute( "resources", ResourceQuery, subscriptionId, cancellationToken );
 
         var mapper = new ResourceMapper( _logger );
         var resources = new List<AzResource>();
@@ -133,11 +137,11 @@ public class AzureService
          */
         var accounts = resources.OfType<AzStorageAccount>().ToList();
 
-        await new StorageEnricher( _client, _logger ).Enrich( accounts );
+        await new StorageEnricher( _client, _logger ).Enrich( accounts, cancellationToken );
 
         var namespaces = resources.OfType<AzEventHubNamespace>().ToList();
 
-        await new EventHubEnricher( _client, _logger ).Enrich( namespaces );
+        await new EventHubEnricher( _client, _logger ).Enrich( namespaces, cancellationToken );
 
 
         /*
@@ -158,9 +162,9 @@ public class AzureService
 
 
     /// <summary />
-    private async Task<System.Text.Json.JsonElement> SubscriptionResolve( ResourceGraphQuery query, string subscriptionName )
+    private async Task<System.Text.Json.JsonElement> SubscriptionResolve( ResourceGraphQuery query, string subscriptionName, CancellationToken cancellationToken )
     {
-        var rows = await query.Execute( "subscriptions", SubscriptionQuery, null );
+        var rows = await query.Execute( "subscriptions", SubscriptionQuery, null, cancellationToken );
 
         var matches = rows
             .Where( x => string.Equals( x.Str( "name" ), subscriptionName, StringComparison.OrdinalIgnoreCase ) == true

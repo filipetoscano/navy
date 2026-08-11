@@ -17,7 +17,7 @@ namespace Lefty.Navy;
 public class Program
 {
     /// <summary />
-    public static int Main( string[] args )
+    public static async Task<int> Main( string[] args )
     {
         /*
          * 
@@ -76,17 +76,47 @@ public class Program
 
 
         /*
-         * 
+         * An interrupt asks the command to stop rather than killing the process
+         * where it stands, so that a run which is part way through a
+         * subscription unwinds instead of leaving a half-written file. A second
+         * interrupt is left to the runtime, which does kill it.
+         */
+        using var cts = new CancellationTokenSource();
+
+        Console.CancelKeyPress += ( _, e ) =>
+        {
+            if ( cts.IsCancellationRequested == true )
+                return;
+
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+
+        /*
+         *
          */
         try
         {
-            return app.Execute( args );
+            return await app.ExecuteAsync( args, cts.Token );
         }
         catch ( CommandParsingException ex )
         {
             Console.WriteLine( "err: " + ex.Message );
 
             return 2;
+        }
+        catch ( OperationCanceledException ) when ( cts.IsCancellationRequested == true )
+        {
+            /*
+             * Reported through the logger rather than to the console, because
+             * stdout carries the inventory and a message on it would corrupt
+             * whatever the output is piped into. 130 is what a shell expects
+             * from a process which stopped on an interrupt.
+             */
+            logger.Warning( "interrupted, the inventory was not completed" );
+
+            return 130;
         }
         catch ( Exception ex )
         {
