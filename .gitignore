@@ -12,4 +12,7 @@ obj/
 *.pubxml.user
 *.sqlproj.user
 
+# 
+/src/Lefty.Navy/*.json
+
 # eof

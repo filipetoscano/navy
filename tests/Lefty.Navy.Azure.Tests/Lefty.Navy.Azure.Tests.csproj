@@ -19,8 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Lefty.Navy.Azure\Lefty.Navy.Azure.csproj" />
-    <ProjectReference Include="..\Lefty.Navy.Model\Lefty.Navy.Model.csproj" />
+    <ProjectReference Include="..\..\src\Lefty.Navy.Azure\Lefty.Navy.Azure.csproj" />
+    <ProjectReference Include="..\..\src\Lefty.Navy.Model\Lefty.Navy.Model.csproj" />
   </ItemGroup>
 
 </Project>
