@@ -23,8 +23,9 @@ namespace Lefty.Navy.Azure;
 /// <see cref="AzPrivateEndpointConnection.PrivateLinkServiceId" /> stays an
 /// identifier too. Resolving either would close a loop. The same holds for a
 /// route table, whose subnets stay identifiers because a subnet already holds
-/// its table, and for a SQL database, whose server stays an identifier because
-/// the server holds its databases.
+/// its table; for a network security group, whose subnets and network
+/// interfaces stay identifiers for that same reason; and for a SQL database,
+/// whose server stays an identifier because the server holds its databases.
 /// </para>
 /// <para>
 /// A resolved object is shared rather than copied, so a subnet reached through
@@ -121,6 +122,8 @@ public class ResourceLinker
 
             if ( resource is AzSqlServer server )
             {
+                server.PrimaryUserAssignedIdentity = Lookup<AzManagedIdentity>( byId, server.PrimaryUserAssignedIdentityId );
+
                 foreach ( var id in server.PrivateEndpointIds )
                 {
                     var linked = Lookup<AzPrivateEndpoint>( byId, id );
@@ -129,6 +132,9 @@ public class ResourceLinker
                         server.PrivateEndpoints.Add( linked );
                 }
             }
+
+            if ( resource is AzDiskEncryptionSet encryptionSet )
+                encryptionSet.KeyVault = Lookup<AzKeyVault>( byId, encryptionSet.KeyVaultId );
 
             /*
              * A database names its server, rather than a server listing its

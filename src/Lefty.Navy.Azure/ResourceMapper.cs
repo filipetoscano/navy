@@ -35,6 +35,9 @@ public class ResourceMapper
     /// <summary />
     private const string RouteType = "Microsoft.Network/routeTables/routes";
 
+    /// <summary />
+    private const string SecurityRuleType = "Microsoft.Network/networkSecurityGroups/securityRules";
+
     private readonly ILogger _logger;
 
 
@@ -56,8 +59,11 @@ public class ResourceMapper
              * Types which model properties of their own.
              */
             "microsoft.apimanagement/service" => MapApiManagement( row ),
+            "microsoft.compute/diskencryptionsets" => MapDiskEncryptionSet( row ),
             "microsoft.keyvault/vaults" => MapKeyVault( row ),
+            "microsoft.managedidentity/userassignedidentities" => MapManagedIdentity( row ),
             "microsoft.network/networkinterfaces" => MapNetworkInterface( row ),
+            "microsoft.network/networksecuritygroups" => MapNetworkSecurityGroup( row ),
             "microsoft.network/privateendpoints" => MapPrivateEndpoint( row ),
             "microsoft.network/routetables" => MapRouteTable( row ),
             "microsoft.network/virtualnetworks" => MapVirtualNetwork( row ),
@@ -70,12 +76,9 @@ public class ResourceMapper
              * common ones. Mapping them onto their own class is what allows
              * references to them to resolve.
              */
-            "microsoft.compute/diskencryptionsets" => Basic<AzDiskEncryptionSet>( row ),
             "microsoft.databricks/accessconnectors" => Basic<AzDatabricksConnector>( row ),
             "microsoft.databricks/workspaces" => Basic<AzDatabricksWorkspace>( row ),
             "microsoft.insights/components" => Basic<AzApplicationInsights>( row ),
-            "microsoft.managedidentity/userassignedidentities" => Basic<AzManagedIdentity>( row ),
-            "microsoft.network/networksecuritygroups" => Basic<AzNetworkSecurityGroup>( row ),
 
             _ => Basic<AzResource>( row ),
         };
@@ -500,6 +503,127 @@ public class ResourceMapper
         }
 
         return network;
+    }
+
+
+    /// <summary />
+    private static AzResource MapNetworkSecurityGroup( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var group = Basic<AzNetworkSecurityGroup>( row );
+
+        group.ProvisioningState = properties.Str( "provisioningState" );
+        group.FlushConnection = properties.Bool( "flushConnection" );
+
+        /*
+         * defaultSecurityRules is returned alongside these, and is skipped: the
+         * same six rules are reported for every group in every subscription.
+         */
+        foreach ( var item in properties.Items( "securityRules" ) )
+        {
+            var rule = item.Obj( "properties" );
+
+            group.SecurityRules.Add( new AzSecurityRule
+            {
+                Id = item.Str( "id" ) ?? "",
+                Name = item.Str( "name" ) ?? "",
+                Type = item.Str( "type" ) ?? SecurityRuleType,
+                Description = rule.Str( "description" ),
+                Direction = rule.Str( "direction" ),
+                Access = rule.Str( "access" ),
+                Priority = rule.Int( "priority" ),
+                Protocol = rule.Str( "protocol" ),
+                SourceAddressPrefixes = OneOrMany( rule, "sourceAddressPrefix", "sourceAddressPrefixes" ),
+                SourcePortRanges = OneOrMany( rule, "sourcePortRange", "sourcePortRanges" ),
+                DestinationAddressPrefixes = OneOrMany( rule, "destinationAddressPrefix", "destinationAddressPrefixes" ),
+                DestinationPortRanges = OneOrMany( rule, "destinationPortRange", "destinationPortRanges" ),
+                SourceApplicationSecurityGroupIds = IdList( rule, "sourceApplicationSecurityGroups" ),
+                DestinationApplicationSecurityGroupIds = IdList( rule, "destinationApplicationSecurityGroups" ),
+            } );
+        }
+
+        group.SubnetIds = IdList( properties, "subnets" );
+        group.NetworkInterfaceIds = IdList( properties, "networkInterfaces" );
+
+        return group;
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// A security rule states each of its addresses and ports either as a single
+    /// value or as a list, and never as both: whichever form was not used is
+    /// reported empty, or left out of the row altogether. The model keeps only
+    /// the list.
+    /// </remarks>
+    private static List<string> OneOrMany( JsonElement element, string one, string many )
+    {
+        var single = element.Str( one );
+
+        if ( single == null || single.Length == 0 )
+            return element.StrList( many );
+
+        return [ single ];
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// The identifiers held by an array of objects which report nothing beyond
+    /// what they point at.
+    /// </remarks>
+    private static List<string> IdList( JsonElement element, string name )
+    {
+        var ids = new List<string>();
+
+        foreach ( var item in element.Items( name ) )
+        {
+            var id = item.Str( "id" );
+
+            if ( id != null )
+                ids.Add( id );
+        }
+
+        return ids;
+    }
+
+
+    /// <summary />
+    private static AzResource MapManagedIdentity( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var identity = Basic<AzManagedIdentity>( row );
+
+        identity.PrincipalId = properties.Str( "principalId" );
+        identity.ClientId = properties.Str( "clientId" );
+        identity.TenantId = properties.Str( "tenantId" );
+
+        return identity;
+    }
+
+
+    /// <summary />
+    private static AzResource MapDiskEncryptionSet( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var set = Basic<AzDiskEncryptionSet>( row );
+
+        set.EncryptionType = properties.Str( "encryptionType" );
+        set.ProvisioningState = properties.Str( "provisioningState" );
+        set.RotationToLatestKeyVersionEnabled = properties.Bool( "rotationToLatestKeyVersionEnabled" );
+        set.LastKeyRotationTimestamp = properties.Moment( "lastKeyRotationTimestamp" );
+        set.FederatedClientId = properties.Str( "federatedClientId" );
+
+        /*
+         * previousKeys records the keys the set has rotated away from, and is
+         * skipped: only the key in force says anything about the disks today.
+         */
+        var key = properties.Obj( "activeKey" );
+
+        set.KeyUrl = key.Str( "keyUrl" );
+        set.KeyVaultId = key.Obj( "sourceVault" ).Str( "id" );
+
+        return set;
     }
 
 

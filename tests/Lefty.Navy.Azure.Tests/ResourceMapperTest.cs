@@ -180,8 +180,9 @@ public class ResourceMapperTest
 
     /// <summary />
     /// <remarks>
-    /// These types carry no properties of their own, but must still be mapped
-    /// onto their own class: it is what allows references to them to resolve.
+    /// A declared type must be mapped onto its own class, which is what allows
+    /// references to it to resolve, and must survive a row which reports no
+    /// properties at all.
     /// </remarks>
     [Theory]
     [InlineData( "Microsoft.Network/networkSecurityGroups", typeof( AzNetworkSecurityGroup ) )]
@@ -191,6 +192,8 @@ public class ResourceMapperTest
     [InlineData( "Microsoft.Sql/servers", typeof( AzSqlServer ) )]
     [InlineData( "microsoft.sql/servers/databases", typeof( AzSqlDatabase ) )]
     [InlineData( "MICROSOFT.INSIGHTS/COMPONENTS", typeof( AzApplicationInsights ) )]
+    [InlineData( "Microsoft.Compute/diskEncryptionSets", typeof( AzDiskEncryptionSet ) )]
+    [InlineData( "Microsoft.ManagedIdentity/userAssignedIdentities", typeof( AzManagedIdentity ) )]
     public void DeclaredType_MapsToItsOwnClass( string type, Type expected )
     {
         var row = Row( $$"""

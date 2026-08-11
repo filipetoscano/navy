@@ -72,4 +72,7 @@ public class AzSqlServer : AzResource
 
     /// <summary />
     public List<AzPrivateEndpoint> PrivateEndpoints { get; set; } = [];
+
+    /// <summary />
+    public AzManagedIdentity? PrimaryUserAssignedIdentity { get; set; }
 }
