@@ -194,6 +194,14 @@ public class ResourceMapperTest
     [InlineData( "MICROSOFT.INSIGHTS/COMPONENTS", typeof( AzApplicationInsights ) )]
     [InlineData( "Microsoft.Compute/diskEncryptionSets", typeof( AzDiskEncryptionSet ) )]
     [InlineData( "Microsoft.ManagedIdentity/userAssignedIdentities", typeof( AzManagedIdentity ) )]
+    [InlineData( "Microsoft.Insights/actionGroups", typeof( AzActionGroup ) )]
+    [InlineData( "Microsoft.Insights/activityLogAlerts", typeof( AzActivityLogAlertRule ) )]
+    [InlineData( "Microsoft.Insights/metricAlerts", typeof( AzMetricAlertRule ) )]
+    [InlineData( "Microsoft.AlertsManagement/smartDetectorAlertRules", typeof( AzSmartDetectorAlertRule ) )]
+    [InlineData( "Microsoft.ContainerService/managedClusters", typeof( AzKubernetesService ) )]
+    [InlineData( "Microsoft.Compute/virtualMachineScaleSets", typeof( AzVirtualMachineScaleSet ) )]
+    [InlineData( "Microsoft.Network/loadBalancers", typeof( AzLoadBalancer ) )]
+    [InlineData( "Microsoft.NetApp/netAppAccounts/capacityPools/volumes", typeof( AzVolume ) )]
     public void DeclaredType_MapsToItsOwnClass( string type, Type expected )
     {
         var row = Row( $$"""

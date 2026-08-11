@@ -73,6 +73,22 @@ internal static class JsonRow
 
 
     /// <summary />
+    /// <remarks>
+    /// Thresholds and throughputs are reported as fractional numbers, and are
+    /// the only place a resource reports one.
+    /// </remarks>
+    public static double Dbl( this JsonElement element, string name )
+    {
+        var value = element.Obj( name );
+
+        if ( value.ValueKind != JsonValueKind.Number )
+            return 0;
+
+        return value.TryGetDouble( out var number ) == true ? number : 0;
+    }
+
+
+    /// <summary />
     public static DateTimeOffset? Moment( this JsonElement element, string name )
     {
         var value = element.Obj( name );
@@ -112,6 +128,23 @@ internal static class JsonRow
             return [];
 
         return [ .. value.EnumerateArray() ];
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// The members of an object whose keys are not known ahead of time, and
+    /// whose values are objects in their own right.
+    /// </remarks>
+    public static IEnumerable<KeyValuePair<string, JsonElement>> Fields( this JsonElement element, string name )
+    {
+        var value = element.Obj( name );
+
+        if ( value.ValueKind != JsonValueKind.Object )
+            yield break;
+
+        foreach ( var property in value.EnumerateObject() )
+            yield return new KeyValuePair<string, JsonElement>( property.Name, property.Value );
     }
 
 

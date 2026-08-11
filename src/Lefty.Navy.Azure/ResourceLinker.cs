@@ -28,6 +28,13 @@ namespace Lefty.Navy.Azure;
 /// whose server stays an identifier because the server holds its databases.
 /// </para>
 /// <para>
+/// A second reason to leave a reference unresolved is weight rather than
+/// cycles. What an alert rule watches, and which backend pool a scale set is
+/// placed into, stay identifiers because a subscription holds far more rules
+/// and scale sets than it holds watched resources and balancers: resolving
+/// them would write a copy of the target under each one.
+/// </para>
+/// <para>
 /// A resolved object is shared rather than copied, so a subnet reached through
 /// an API Management service is the same instance as the one held by its
 /// virtual network. Serialization writes it out at both places.
@@ -136,6 +143,50 @@ public class ResourceLinker
             if ( resource is AzDiskEncryptionSet encryptionSet )
                 encryptionSet.KeyVault = Lookup<AzKeyVault>( byId, encryptionSet.KeyVaultId );
 
+            if ( resource is AzKubernetesService cluster )
+            {
+                cluster.DiskEncryptionSet = Lookup<AzDiskEncryptionSet>( byId, cluster.DiskEncryptionSetId );
+                cluster.KubeletIdentity = Lookup<AzManagedIdentity>( byId, cluster.KubeletIdentityId );
+
+                foreach ( var pool in cluster.NodePools )
+                    pool.Subnet = SubnetLookup( subnetsById, pool.SubnetId );
+            }
+
+            if ( resource is AzVirtualMachineScaleSet scaleSet )
+            {
+                scaleSet.DiskEncryptionSet = Lookup<AzDiskEncryptionSet>( byId, scaleSet.DiskEncryptionSetId );
+
+                foreach ( var template in scaleSet.NetworkInterfaces )
+                {
+                    template.NetworkSecurityGroup = Lookup<AzNetworkSecurityGroup>( byId, template.NetworkSecurityGroupId );
+
+                    foreach ( var configuration in template.IPConfigurations )
+                        configuration.Subnet = SubnetLookup( subnetsById, configuration.SubnetId );
+                }
+            }
+
+            if ( resource is AzLoadBalancer balancer )
+            {
+                foreach ( var frontend in balancer.FrontendIPConfigurations )
+                    frontend.Subnet = SubnetLookup( subnetsById, frontend.SubnetId );
+            }
+
+            if ( resource is AzVolume volume )
+                volume.Subnet = SubnetLookup( subnetsById, volume.SubnetId );
+
+            /*
+             * Every kind of alert rule names the groups it notifies, and the
+             * same group is normally named by a great many rules.
+             */
+            if ( resource is AzActivityLogAlertRule activityRule )
+                ActionGroups( byId, activityRule.ActionGroupIds, activityRule.ActionGroups );
+
+            if ( resource is AzMetricAlertRule metricRule )
+                ActionGroups( byId, metricRule.ActionGroupIds, metricRule.ActionGroups );
+
+            if ( resource is AzSmartDetectorAlertRule detectorRule )
+                ActionGroups( byId, detectorRule.ActionGroupIds, detectorRule.ActionGroups );
+
             /*
              * A database names its server, rather than a server listing its
              * databases, so the relationship is assembled from this side.
@@ -147,6 +198,19 @@ public class ResourceLinker
                 else
                     _logger.LogDebug( "database {Id} names a server which was not found", database.Id );
             }
+        }
+    }
+
+
+    /// <summary />
+    private void ActionGroups( Dictionary<string, AzResource> byId, List<string> ids, List<AzActionGroup> groups )
+    {
+        foreach ( var id in ids )
+        {
+            var group = Lookup<AzActionGroup>( byId, id );
+
+            if ( group != null )
+                groups.Add( group );
         }
     }
 

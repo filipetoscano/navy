@@ -38,6 +38,30 @@ public class ResourceMapper
     /// <summary />
     private const string SecurityRuleType = "Microsoft.Network/networkSecurityGroups/securityRules";
 
+    /// <summary>
+    /// Agent pools are returned inline within the cluster, and carry neither an
+    /// identifier nor a type of their own.
+    /// </summary>
+    private const string NodePoolType = "Microsoft.ContainerService/managedClusters/agentPools";
+
+    /// <summary />
+    private const string FrontendType = "Microsoft.Network/loadBalancers/frontendIPConfigurations";
+
+    /// <summary />
+    private const string BackendPoolType = "Microsoft.Network/loadBalancers/backendAddressPools";
+
+    /// <summary />
+    private const string LoadBalancingRuleType = "Microsoft.Network/loadBalancers/loadBalancingRules";
+
+    /// <summary />
+    private const string ProbeType = "Microsoft.Network/loadBalancers/probes";
+
+    /// <summary />
+    private const string InboundNatRuleType = "Microsoft.Network/loadBalancers/inboundNatRules";
+
+    /// <summary />
+    private const string OutboundRuleType = "Microsoft.Network/loadBalancers/outboundRules";
+
     private readonly ILogger _logger;
 
 
@@ -58,10 +82,19 @@ public class ResourceMapper
             /*
              * Types which model properties of their own.
              */
+            "microsoft.alertsmanagement/smartdetectoralertrules" => MapSmartDetectorAlertRule( row ),
             "microsoft.apimanagement/service" => MapApiManagement( row ),
             "microsoft.compute/diskencryptionsets" => MapDiskEncryptionSet( row ),
+            "microsoft.compute/virtualmachinescalesets" => MapVirtualMachineScaleSet( row ),
+            "microsoft.containerservice/managedclusters" => MapKubernetesService( row ),
+            "microsoft.insights/actiongroups" => MapActionGroup( row ),
+            "microsoft.insights/activitylogalerts" => MapActivityLogAlertRule( row ),
+            "microsoft.insights/components" => MapApplicationInsights( row ),
+            "microsoft.insights/metricalerts" => MapMetricAlertRule( row ),
             "microsoft.keyvault/vaults" => MapKeyVault( row ),
             "microsoft.managedidentity/userassignedidentities" => MapManagedIdentity( row ),
+            "microsoft.netapp/netappaccounts/capacitypools/volumes" => MapVolume( row ),
+            "microsoft.network/loadbalancers" => MapLoadBalancer( row ),
             "microsoft.network/networkinterfaces" => MapNetworkInterface( row ),
             "microsoft.network/networksecuritygroups" => MapNetworkSecurityGroup( row ),
             "microsoft.network/privateendpoints" => MapPrivateEndpoint( row ),
@@ -78,7 +111,6 @@ public class ResourceMapper
              */
             "microsoft.databricks/accessconnectors" => Basic<AzDatabricksConnector>( row ),
             "microsoft.databricks/workspaces" => Basic<AzDatabricksWorkspace>( row ),
-            "microsoft.insights/components" => Basic<AzApplicationInsights>( row ),
 
             _ => Basic<AzResource>( row ),
         };
@@ -624,6 +656,637 @@ public class ResourceMapper
         set.KeyVaultId = key.Obj( "sourceVault" ).Str( "id" );
 
         return set;
+    }
+
+
+    /// <summary />
+    private static AzResource MapActionGroup( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var group = Basic<AzActionGroup>( row );
+
+        group.GroupShortName = properties.Str( "groupShortName" );
+        group.Enabled = properties.Bool( "enabled" );
+
+        Receivers( group, properties, "emailReceivers", "Email", "emailAddress" );
+        Receivers( group, properties, "smsReceivers", "Sms", "phoneNumber" );
+        Receivers( group, properties, "webhookReceivers", "Webhook", "serviceUri" );
+        Receivers( group, properties, "armRoleReceivers", "ArmRole", "roleId" );
+        Receivers( group, properties, "azureFunctionReceivers", "AzureFunction", "functionAppResourceId" );
+        Receivers( group, properties, "logicAppReceivers", "LogicApp", "resourceId" );
+        Receivers( group, properties, "eventHubReceivers", "EventHub", "eventHubName" );
+        Receivers( group, properties, "voiceReceivers", "Voice", "phoneNumber" );
+        Receivers( group, properties, "automationRunbookReceivers", "AutomationRunbook", "automationAccountId" );
+        Receivers( group, properties, "itsmReceivers", "Itsm", "workspaceId" );
+        Receivers( group, properties, "azureAppPushReceivers", "AzureAppPush", "emailAddress" );
+
+        return group;
+    }
+
+
+    /// <summary />
+    /// <param name="target">
+    /// Property holding the destination, which differs with the kind of
+    /// receiver.
+    /// </param>
+    private static void Receivers( AzActionGroup group, JsonElement properties, string array, string kind, string target )
+    {
+        foreach ( var item in properties.Items( array ) )
+        {
+            group.Receivers.Add( new AzActionGroupReceiver
+            {
+                Kind = kind,
+                Name = item.Str( "name" ) ?? "",
+                Target = item.Str( target ),
+                Status = item.Str( "status" ),
+                UseCommonAlertSchema = item.Bool( "useCommonAlertSchema" ),
+            } );
+        }
+    }
+
+
+    /// <summary />
+    private static AzResource MapActivityLogAlertRule( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var rule = Basic<AzActivityLogAlertRule>( row );
+
+        rule.Description = properties.Str( "description" );
+        rule.Enabled = properties.Bool( "enabled" );
+        rule.Scopes = properties.StrList( "scopes" );
+
+        foreach ( var item in properties.Obj( "condition" ).Items( "allOf" ) )
+        {
+            var condition = Condition( item );
+
+            foreach ( var alternative in item.Items( "anyOf" ) )
+                condition.AnyOf.Add( Condition( alternative ) );
+
+            rule.Conditions.Add( condition );
+        }
+
+        rule.ActionGroupIds = ActionGroupIds( properties.Obj( "actions" ).Items( "actionGroups" ) );
+
+        return rule;
+    }
+
+
+    /// <summary />
+    private static AzActivityLogAlertCondition Condition( JsonElement item )
+    {
+        return new AzActivityLogAlertCondition
+        {
+            Field = item.Str( "field" ),
+            EqualTo = item.Str( "equals" ),
+            ContainsAny = item.StrList( "containsAny" ),
+        };
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// An alert rule names its action groups as objects holding an identifier,
+    /// in the same shape whichever kind of rule it is.
+    /// </remarks>
+    private static List<string> ActionGroupIds( List<JsonElement> items )
+    {
+        var ids = new List<string>();
+
+        foreach ( var item in items )
+        {
+            var id = item.Str( "actionGroupId" );
+
+            if ( id != null )
+                ids.Add( id );
+        }
+
+        return ids;
+    }
+
+
+    /// <summary />
+    private static AzResource MapMetricAlertRule( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var rule = Basic<AzMetricAlertRule>( row );
+
+        rule.Description = properties.Str( "description" );
+        rule.Severity = properties.Int( "severity" );
+        rule.Enabled = properties.Bool( "enabled" );
+        rule.AutoMitigate = properties.Bool( "autoMitigate" );
+
+        rule.EvaluationFrequency = properties.Str( "evaluationFrequency" );
+        rule.WindowSize = properties.Str( "windowSize" );
+
+        rule.Scopes = properties.StrList( "scopes" );
+        rule.TargetResourceType = properties.Str( "targetResourceType" );
+        rule.TargetResourceRegion = properties.Str( "targetResourceRegion" );
+
+        var criteria = properties.Obj( "criteria" );
+
+        /*
+         * The kind of criteria is reported as an OData type name, which is the
+         * shape itself prefixed by the namespace it was declared in.
+         */
+        var kind = criteria.Str( "odata.type" );
+
+        if ( kind != null )
+            rule.CriteriaType = kind[ ( kind.LastIndexOf( '.' ) + 1 ).. ];
+
+        rule.WebTestId = criteria.Str( "webTestId" );
+        rule.ComponentId = criteria.Str( "componentId" );
+        rule.FailedLocationCount = criteria.Int( "failedLocationCount" );
+
+        foreach ( var item in criteria.Items( "allOf" ) )
+        {
+            var criterion = new AzMetricAlertCriterion
+            {
+                Name = item.Str( "name" ) ?? "",
+                CriterionType = item.Str( "criterionType" ),
+                MetricName = item.Str( "metricName" ),
+                MetricNamespace = item.Str( "metricNamespace" ),
+                Operator = item.Str( "operator" ),
+                Threshold = item.Dbl( "threshold" ),
+                TimeAggregation = item.Str( "timeAggregation" ),
+                SkipMetricValidation = item.Bool( "skipMetricValidation" ),
+                AlertSensitivity = item.Str( "alertSensitivity" ),
+                FailingPeriodsToAlert = item.Obj( "failingPeriods" ).Int( "minFailingPeriodsToAlert" ),
+                FailingPeriodsWindow = item.Obj( "failingPeriods" ).Int( "numberOfEvaluationPeriods" ),
+            };
+
+            foreach ( var dimension in item.Items( "dimensions" ) )
+            {
+                criterion.Dimensions.Add( new AzMetricAlertDimension
+                {
+                    Name = dimension.Str( "name" ) ?? "",
+                    Operator = dimension.Str( "operator" ),
+                    Values = dimension.StrList( "values" ),
+                } );
+            }
+
+            rule.Criteria.Add( criterion );
+        }
+
+        rule.ActionGroupIds = ActionGroupIds( properties.Items( "actions" ) );
+
+        return rule;
+    }
+
+
+    /// <summary />
+    private static AzResource MapSmartDetectorAlertRule( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var rule = Basic<AzSmartDetectorAlertRule>( row );
+
+        rule.Description = properties.Str( "description" );
+        rule.State = properties.Str( "state" );
+        rule.Severity = properties.Str( "severity" );
+        rule.Frequency = properties.Str( "frequency" );
+
+        var detector = properties.Obj( "detector" );
+
+        rule.DetectorId = detector.Str( "id" );
+        rule.DetectorName = detector.Str( "name" );
+        rule.DetectorSupportedResourceTypes = detector.StrList( "supportedResourceTypes" );
+
+        /*
+         * Named scope rather than scopes, and holding the identifiers directly
+         * rather than objects which wrap them, unlike every other alert rule.
+         */
+        rule.Scopes = properties.StrList( "scope" );
+        rule.ThrottlingDuration = properties.Obj( "throttling" ).Str( "duration" );
+
+        var actions = properties.Obj( "actionGroups" );
+
+        rule.CustomEmailSubject = actions.Str( "customEmailSubject" );
+        rule.CustomWebhookPayload = actions.Str( "customWebhookPayload" );
+        rule.ActionGroupIds = actions.StrList( "groupIds" );
+
+        return rule;
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// Application Insights reports most of its properties in PascalCase, and a
+    /// few of them in camelCase, which is why the names below are inconsistent.
+    /// </remarks>
+    private static AzResource MapApplicationInsights( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var component = Basic<AzApplicationInsights>( row );
+
+        component.Kind = row.Str( "kind" );
+        component.ApplicationType = properties.Str( "Application_Type" );
+        component.AppId = properties.Str( "AppId" );
+        component.ProvisioningState = properties.Str( "provisioningState" );
+        component.CreationDate = properties.Moment( "CreationDate" );
+
+        component.IngestionMode = properties.Str( "IngestionMode" );
+        component.WorkspaceResourceId = properties.Str( "WorkspaceResourceId" );
+        component.RetentionInDays = properties.Int( "RetentionInDays" );
+        component.SamplingPercentage = properties.Dbl( "SamplingPercentage" );
+
+        component.DisableIpMasking = properties.Bool( "DisableIpMasking" );
+        component.DisableLocalAuth = properties.Bool( "DisableLocalAuth" );
+        component.PublicNetworkAccessForIngestion = properties.Str( "publicNetworkAccessForIngestion" );
+        component.PublicNetworkAccessForQuery = properties.Str( "publicNetworkAccessForQuery" );
+
+        foreach ( var scope in properties.Items( "PrivateLinkScopedResources" ) )
+        {
+            var id = scope.Str( "ResourceId" );
+
+            if ( id != null )
+                component.PrivateLinkScopedResourceIds.Add( id );
+        }
+
+        return component;
+    }
+
+
+    /// <summary />
+    private static AzResource MapKubernetesService( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var cluster = Basic<AzKubernetesService>( row );
+
+        cluster.Sku = row.Obj( "sku" ).Str( "name" );
+        cluster.SkuTier = row.Obj( "sku" ).Str( "tier" );
+        cluster.ProvisioningState = properties.Str( "provisioningState" );
+        cluster.PowerState = properties.Obj( "powerState" ).Str( "code" );
+
+        cluster.KubernetesVersion = properties.Str( "kubernetesVersion" );
+        cluster.CurrentKubernetesVersion = properties.Str( "currentKubernetesVersion" );
+        cluster.UpgradeChannel = properties.Obj( "autoUpgradeProfile" ).Str( "upgradeChannel" );
+        cluster.NodeOSUpgradeChannel = properties.Obj( "autoUpgradeProfile" ).Str( "nodeOSUpgradeChannel" );
+        cluster.SupportPlan = properties.Str( "supportPlan" );
+
+        cluster.DnsPrefix = properties.Str( "dnsPrefix" );
+        cluster.Fqdn = properties.Str( "fqdn" );
+        cluster.PrivateFqdn = properties.Str( "privateFQDN" );
+
+        var apiServer = properties.Obj( "apiServerAccessProfile" );
+
+        cluster.EnablePrivateCluster = apiServer.Bool( "enablePrivateCluster" );
+        cluster.PrivateDnsZone = apiServer.Str( "privateDNSZone" );
+        cluster.AuthorizedIPRanges = apiServer.StrList( "authorizedIPRanges" );
+
+        cluster.NodeResourceGroup = properties.Str( "nodeResourceGroup" );
+        cluster.EnableRbac = properties.Bool( "enableRBAC" );
+        cluster.DisableLocalAccounts = properties.Bool( "disableLocalAccounts" );
+
+        var aad = properties.Obj( "aadProfile" );
+
+        cluster.EnableAzureRbac = aad.Bool( "enableAzureRBAC" );
+        cluster.AadAdminGroupObjectIds = aad.StrList( "adminGroupObjectIDs" );
+
+        var security = properties.Obj( "securityProfile" );
+
+        cluster.WorkloadIdentityEnabled = security.Obj( "workloadIdentity" ).Bool( "enabled" );
+        cluster.DefenderEnabled = security.Obj( "defender" ).Obj( "securityMonitoring" ).Bool( "enabled" );
+        cluster.OidcIssuerEnabled = properties.Obj( "oidcIssuerProfile" ).Bool( "enabled" );
+
+        var network = properties.Obj( "networkProfile" );
+
+        cluster.NetworkPlugin = network.Str( "networkPlugin" );
+        cluster.NetworkPluginMode = network.Str( "networkPluginMode" );
+        cluster.NetworkPolicy = network.Str( "networkPolicy" );
+        cluster.NetworkDataplane = network.Str( "networkDataplane" );
+        cluster.OutboundType = network.Str( "outboundType" );
+        cluster.LoadBalancerSku = network.Str( "loadBalancerSku" );
+        cluster.PodCidrs = network.StrList( "podCidrs" );
+        cluster.ServiceCidrs = network.StrList( "serviceCidrs" );
+        cluster.DnsServiceIP = network.Str( "dnsServiceIP" );
+        cluster.ServiceMeshMode = properties.Obj( "serviceMeshProfile" ).Str( "mode" );
+
+        cluster.DiskEncryptionSetId = properties.Str( "diskEncryptionSetID" );
+        cluster.KubeletIdentityId = properties.Obj( "identityProfile" ).Obj( "kubeletidentity" ).Str( "resourceId" );
+
+        foreach ( var item in properties.Items( "agentPoolProfiles" ) )
+        {
+            var name = item.Str( "name" ) ?? "";
+
+            cluster.NodePools.Add( new AzKubernetesNodePool
+            {
+                Id = cluster.Id + "/agentPools/" + name,
+                Name = name,
+                Type = NodePoolType,
+                Mode = item.Str( "mode" ),
+                Count = item.Int( "count" ),
+                VmSize = item.Str( "vmSize" ),
+                ProvisioningState = item.Str( "provisioningState" ),
+                PowerState = item.Obj( "powerState" ).Str( "code" ),
+                EnableAutoScaling = item.Bool( "enableAutoScaling" ),
+                MinCount = item.Int( "minCount" ),
+                MaxCount = item.Int( "maxCount" ),
+                MaxPods = item.Int( "maxPods" ),
+                AvailabilityZones = item.StrList( "availabilityZones" ),
+                OsType = item.Str( "osType" ),
+                OsSku = item.Str( "osSKU" ),
+                OsDiskSizeGB = item.Int( "osDiskSizeGB" ),
+                OsDiskType = item.Str( "osDiskType" ),
+                EnableEncryptionAtHost = item.Bool( "enableEncryptionAtHost" ),
+                EnableFips = item.Bool( "enableFIPS" ),
+                EnableNodePublicIP = item.Bool( "enableNodePublicIP" ),
+                OrchestratorVersion = item.Str( "orchestratorVersion" ),
+                CurrentOrchestratorVersion = item.Str( "currentOrchestratorVersion" ),
+                NodeImageVersion = item.Str( "nodeImageVersion" ),
+                NodeLabels = item.TagMap( "nodeLabels" ),
+                NodeTaints = item.StrList( "nodeTaints" ),
+                SubnetId = item.Str( "vnetSubnetID" ),
+            } );
+        }
+
+        foreach ( var addon in properties.Fields( "addonProfiles" ) )
+        {
+            if ( addon.Value.Bool( "enabled" ) == false )
+                continue;
+
+            cluster.Addons.Add( new AzKubernetesAddon
+            {
+                Name = addon.Key,
+                IdentityResourceId = addon.Value.Obj( "identity" ).Str( "resourceId" ),
+            } );
+        }
+
+        return cluster;
+    }
+
+
+    /// <summary />
+    private static AzResource MapVirtualMachineScaleSet( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var set = Basic<AzVirtualMachineScaleSet>( row );
+
+        set.Sku = row.Obj( "sku" ).Str( "name" );
+        set.SkuTier = row.Obj( "sku" ).Str( "tier" );
+        set.SkuCapacity = row.Obj( "sku" ).Int( "capacity" );
+
+        set.OrchestrationMode = properties.Str( "orchestrationMode" );
+        set.UpgradeMode = properties.Obj( "upgradePolicy" ).Str( "mode" );
+        set.ProvisioningState = properties.Str( "provisioningState" );
+        set.TimeCreated = properties.Moment( "timeCreated" );
+        set.Overprovision = properties.Bool( "overprovision" );
+        set.SinglePlacementGroup = properties.Bool( "singlePlacementGroup" );
+        set.PlatformFaultDomainCount = properties.Int( "platformFaultDomainCount" );
+
+        var profile = properties.Obj( "virtualMachineProfile" );
+        var os = profile.Obj( "osProfile" );
+
+        set.ComputerNamePrefix = os.Str( "computerNamePrefix" );
+        set.AdminUsername = os.Str( "adminUsername" );
+        set.DisablePasswordAuthentication = os.Obj( "linuxConfiguration" ).Bool( "disablePasswordAuthentication" );
+
+        set.SecurityType = profile.Obj( "securityProfile" ).Str( "securityType" );
+        set.EncryptionAtHost = profile.Obj( "securityProfile" ).Bool( "encryptionAtHost" );
+
+        var storage = profile.Obj( "storageProfile" );
+        var disk = storage.Obj( "osDisk" );
+
+        set.OsType = disk.Str( "osType" );
+        set.OsDiskSizeGB = disk.Int( "diskSizeGB" );
+        set.OsDiskCaching = disk.Str( "caching" );
+        set.OsDiskStorageAccountType = disk.Obj( "managedDisk" ).Str( "storageAccountType" );
+        set.DiskEncryptionSetId = disk.Obj( "managedDisk" ).Obj( "diskEncryptionSet" ).Str( "id" );
+
+        var image = storage.Obj( "imageReference" );
+
+        set.ImageReferenceId = image.Str( "id" );
+
+        if ( image.Str( "publisher" ) != null )
+        {
+            set.ImageReference = string.Join( ":",
+                image.Str( "publisher" ), image.Str( "offer" ), image.Str( "sku" ), image.Str( "version" ) );
+        }
+
+        foreach ( var item in profile.Obj( "networkProfile" ).Items( "networkInterfaceConfigurations" ) )
+        {
+            var configuration = item.Obj( "properties" );
+
+            var nic = new AzScaleSetNetworkInterface
+            {
+                Name = item.Str( "name" ) ?? "",
+                Primary = configuration.Bool( "primary" ),
+                EnableAcceleratedNetworking = configuration.Bool( "enableAcceleratedNetworking" ),
+                EnableIPForwarding = configuration.Bool( "enableIPForwarding" ),
+                NetworkSecurityGroupId = configuration.Obj( "networkSecurityGroup" ).Str( "id" ),
+            };
+
+            foreach ( var address in configuration.Items( "ipConfigurations" ) )
+            {
+                var settings = address.Obj( "properties" );
+
+                nic.IPConfigurations.Add( new AzScaleSetIPConfiguration
+                {
+                    Name = address.Str( "name" ) ?? "",
+                    Primary = settings.Bool( "primary" ),
+                    PrivateIPAddressVersion = settings.Str( "privateIPAddressVersion" ),
+                    SubnetId = settings.Obj( "subnet" ).Str( "id" ),
+                    LoadBalancerBackendPoolIds = IdList( settings, "loadBalancerBackendAddressPools" ),
+                } );
+            }
+
+            set.NetworkInterfaces.Add( nic );
+        }
+
+        foreach ( var item in profile.Obj( "extensionProfile" ).Items( "extensions" ) )
+        {
+            var extension = item.Obj( "properties" );
+
+            set.Extensions.Add( new AzScaleSetExtension
+            {
+                Name = item.Str( "name" ) ?? "",
+                Publisher = extension.Str( "publisher" ),
+                ExtensionType = extension.Str( "type" ),
+                TypeHandlerVersion = extension.Str( "typeHandlerVersion" ),
+                AutoUpgradeMinorVersion = extension.Bool( "autoUpgradeMinorVersion" ),
+            } );
+        }
+
+        return set;
+    }
+
+
+    /// <summary />
+    private static AzResource MapLoadBalancer( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var balancer = Basic<AzLoadBalancer>( row );
+
+        balancer.Sku = row.Obj( "sku" ).Str( "name" );
+        balancer.SkuTier = row.Obj( "sku" ).Str( "tier" );
+        balancer.ProvisioningState = properties.Str( "provisioningState" );
+
+        foreach ( var item in properties.Items( "frontendIPConfigurations" ) )
+        {
+            var configuration = item.Obj( "properties" );
+
+            balancer.FrontendIPConfigurations.Add( new AzLoadBalancerFrontend
+            {
+                Id = item.Str( "id" ) ?? "",
+                Name = item.Str( "name" ) ?? "",
+                Type = item.Str( "type" ) ?? FrontendType,
+                PrivateIPAddress = configuration.Str( "privateIPAddress" ),
+                PrivateIPAllocationMethod = configuration.Str( "privateIPAllocationMethod" ),
+                PrivateIPAddressVersion = configuration.Str( "privateIPAddressVersion" ),
+                SubnetId = configuration.Obj( "subnet" ).Str( "id" ),
+                PublicIPAddressId = configuration.Obj( "publicIPAddress" ).Str( "id" ),
+                Zones = item.StrList( "zones" ),
+            } );
+        }
+
+        foreach ( var item in properties.Items( "backendAddressPools" ) )
+        {
+            var pool = item.Obj( "properties" );
+
+            balancer.BackendPools.Add( new AzLoadBalancerBackendPool
+            {
+                Id = item.Str( "id" ) ?? "",
+                Name = item.Str( "name" ) ?? "",
+                Type = item.Str( "type" ) ?? BackendPoolType,
+                ProvisioningState = pool.Str( "provisioningState" ),
+                MemberCount = pool.Items( "backendIPConfigurations" ).Count,
+            } );
+        }
+
+        foreach ( var item in properties.Items( "loadBalancingRules" ) )
+        {
+            var rule = item.Obj( "properties" );
+
+            balancer.LoadBalancingRules.Add( new AzLoadBalancerRule
+            {
+                Id = item.Str( "id" ) ?? "",
+                Name = item.Str( "name" ) ?? "",
+                Type = item.Str( "type" ) ?? LoadBalancingRuleType,
+                Protocol = rule.Str( "protocol" ),
+                FrontendPort = rule.Int( "frontendPort" ),
+                BackendPort = rule.Int( "backendPort" ),
+                FrontendIPConfigurationId = rule.Obj( "frontendIPConfiguration" ).Str( "id" ),
+                BackendPoolId = rule.Obj( "backendAddressPool" ).Str( "id" ),
+                ProbeId = rule.Obj( "probe" ).Str( "id" ),
+                LoadDistribution = rule.Str( "loadDistribution" ),
+                IdleTimeoutInMinutes = rule.Int( "idleTimeoutInMinutes" ),
+                EnableFloatingIP = rule.Bool( "enableFloatingIP" ),
+                EnableTcpReset = rule.Bool( "enableTcpReset" ),
+                DisableOutboundSnat = rule.Bool( "disableOutboundSnat" ),
+            } );
+        }
+
+        foreach ( var item in properties.Items( "probes" ) )
+        {
+            var probe = item.Obj( "properties" );
+
+            balancer.Probes.Add( new AzLoadBalancerProbe
+            {
+                Id = item.Str( "id" ) ?? "",
+                Name = item.Str( "name" ) ?? "",
+                Type = item.Str( "type" ) ?? ProbeType,
+                Protocol = probe.Str( "protocol" ),
+                Port = probe.Int( "port" ),
+                RequestPath = probe.Str( "requestPath" ),
+                IntervalInSeconds = probe.Int( "intervalInSeconds" ),
+                ProbeThreshold = probe.Int( "probeThreshold" ),
+            } );
+        }
+
+        foreach ( var item in properties.Items( "inboundNatRules" ) )
+        {
+            var rule = item.Obj( "properties" );
+
+            balancer.InboundNatRules.Add( new AzLoadBalancerNatRule
+            {
+                Id = item.Str( "id" ) ?? "",
+                Name = item.Str( "name" ) ?? "",
+                Type = item.Str( "type" ) ?? InboundNatRuleType,
+                Protocol = rule.Str( "protocol" ),
+                FrontendPort = rule.Int( "frontendPort" ),
+                BackendPort = rule.Int( "backendPort" ),
+                FrontendPortRangeStart = rule.Int( "frontendPortRangeStart" ),
+                FrontendPortRangeEnd = rule.Int( "frontendPortRangeEnd" ),
+                FrontendIPConfigurationId = rule.Obj( "frontendIPConfiguration" ).Str( "id" ),
+                BackendPoolId = rule.Obj( "backendAddressPool" ).Str( "id" ),
+                IdleTimeoutInMinutes = rule.Int( "idleTimeoutInMinutes" ),
+                EnableTcpReset = rule.Bool( "enableTcpReset" ),
+            } );
+        }
+
+        foreach ( var item in properties.Items( "outboundRules" ) )
+        {
+            var rule = item.Obj( "properties" );
+
+            balancer.OutboundRules.Add( new AzLoadBalancerOutboundRule
+            {
+                Id = item.Str( "id" ) ?? "",
+                Name = item.Str( "name" ) ?? "",
+                Type = item.Str( "type" ) ?? OutboundRuleType,
+                Protocol = rule.Str( "protocol" ),
+                AllocatedOutboundPorts = rule.Int( "allocatedOutboundPorts" ),
+                IdleTimeoutInMinutes = rule.Int( "idleTimeoutInMinutes" ),
+                EnableTcpReset = rule.Bool( "enableTcpReset" ),
+                FrontendIPConfigurationIds = IdList( rule, "frontendIPConfigurations" ),
+                BackendPoolId = rule.Obj( "backendAddressPool" ).Str( "id" ),
+            } );
+        }
+
+        return balancer;
+    }
+
+
+    /// <summary />
+    private static AzResource MapVolume( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var volume = Basic<AzVolume>( row );
+
+        volume.CapacityPoolId = ParentOf( volume.Id, "/volumes/" );
+        volume.ProvisioningState = properties.Str( "provisioningState" );
+        volume.CreationToken = properties.Str( "creationToken" );
+        volume.FileSystemId = properties.Str( "fileSystemId" );
+
+        volume.ServiceLevel = properties.Str( "serviceLevel" );
+        volume.UsageThreshold = properties.Long( "usageThreshold" );
+        volume.ThroughputMibps = properties.Dbl( "throughputMibps" );
+        volume.MaximumNumberOfFiles = properties.Long( "maximumNumberOfFiles" );
+        volume.CoolAccess = properties.Bool( "coolAccess" );
+
+        volume.ProtocolTypes = properties.StrList( "protocolTypes" );
+        volume.SecurityStyle = properties.Str( "securityStyle" );
+        volume.UnixPermissions = properties.Str( "unixPermissions" );
+        volume.KerberosEnabled = properties.Bool( "kerberosEnabled" );
+        volume.LdapEnabled = properties.Bool( "ldapEnabled" );
+        volume.SnapshotDirectoryVisible = properties.Bool( "snapshotDirectoryVisible" );
+        volume.EncryptionKeySource = properties.Str( "encryptionKeySource" );
+
+        volume.SubnetId = properties.Str( "subnetId" );
+        volume.NetworkFeatures = properties.Str( "networkFeatures" );
+
+        foreach ( var target in properties.Items( "mountTargets" ) )
+        {
+            var address = target.Str( "ipAddress" );
+
+            if ( address != null )
+                volume.MountTargetIPAddresses.Add( address );
+        }
+
+        foreach ( var rule in properties.Obj( "exportPolicy" ).Items( "rules" ) )
+        {
+            volume.ExportRules.Add( new AzVolumeExportRule
+            {
+                RuleIndex = rule.Int( "ruleIndex" ),
+                AllowedClients = rule.Str( "allowedClients" ),
+                Nfsv3 = rule.Bool( "nfsv3" ),
+                Nfsv41 = rule.Bool( "nfsv41" ),
+                Cifs = rule.Bool( "cifs" ),
+                UnixReadOnly = rule.Bool( "unixReadOnly" ),
+                UnixReadWrite = rule.Bool( "unixReadWrite" ),
+                HasRootAccess = rule.Bool( "hasRootAccess" ),
+                ChownMode = rule.Str( "chownMode" ),
+            } );
+        }
+
+        return volume;
     }
 
 

@@ -7,21 +7,29 @@ namespace Lefty.Navy.Model;
 /// If a specialized class is not available, the placeholder base class
 /// will be used to represent the resource.
 /// </remarks>
+[JsonDerivedType( typeof( AzActionGroup ), nameof( AzActionGroup ) )]
+[JsonDerivedType( typeof( AzActivityLogAlertRule ), nameof( AzActivityLogAlertRule ) )]
 [JsonDerivedType( typeof( AzApiManagement ), nameof( AzApiManagement ) )]
 [JsonDerivedType( typeof( AzApplicationInsights ), nameof( AzApplicationInsights ) )]
 [JsonDerivedType( typeof( AzDatabricksConnector ), nameof( AzDatabricksConnector ) )]
 [JsonDerivedType( typeof( AzDatabricksWorkspace ), nameof( AzDatabricksWorkspace ) )]
 [JsonDerivedType( typeof( AzDiskEncryptionSet ), nameof( AzDiskEncryptionSet ) )]
 [JsonDerivedType( typeof( AzKeyVault ), nameof( AzKeyVault ) )]
+[JsonDerivedType( typeof( AzKubernetesService ), nameof( AzKubernetesService ) )]
+[JsonDerivedType( typeof( AzLoadBalancer ), nameof( AzLoadBalancer ) )]
 [JsonDerivedType( typeof( AzManagedIdentity ), nameof( AzManagedIdentity ) )]
+[JsonDerivedType( typeof( AzMetricAlertRule ), nameof( AzMetricAlertRule ) )]
 [JsonDerivedType( typeof( AzNetworkInterface ), nameof( AzNetworkInterface ) )]
 [JsonDerivedType( typeof( AzNetworkSecurityGroup ), nameof( AzNetworkSecurityGroup ) )]
 [JsonDerivedType( typeof( AzPrivateEndpoint ), nameof( AzPrivateEndpoint ) )]
 [JsonDerivedType( typeof( AzRouteTable ), nameof( AzRouteTable ) )]
+[JsonDerivedType( typeof( AzSmartDetectorAlertRule ), nameof( AzSmartDetectorAlertRule ) )]
 [JsonDerivedType( typeof( AzSqlDatabase ), nameof( AzSqlDatabase ) )]
 [JsonDerivedType( typeof( AzSqlServer ), nameof( AzSqlServer ) )]
 [JsonDerivedType( typeof( AzStorageAccount ), nameof( AzStorageAccount ) )]
+[JsonDerivedType( typeof( AzVirtualMachineScaleSet ), nameof( AzVirtualMachineScaleSet ) )]
 [JsonDerivedType( typeof( AzVirtualNetwork ), nameof( AzVirtualNetwork ) )]
+[JsonDerivedType( typeof( AzVolume ), nameof( AzVolume ) )]
 public class AzResource
 {
     /// <summary />
