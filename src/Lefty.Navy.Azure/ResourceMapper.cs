@@ -26,6 +26,12 @@ public class ResourceMapper
     /// </summary>
     private const string HostnameType = "Microsoft.ApiManagement/service/hostnameConfigurations";
 
+    /// <summary />
+    private const string IPConfigurationType = "Microsoft.Network/networkInterfaces/ipConfigurations";
+
+    /// <summary />
+    private const string ConnectionType = "Microsoft.Network/privateEndpoints/privateLinkServiceConnections";
+
     private readonly ILogger _logger;
 
 
@@ -48,7 +54,10 @@ public class ResourceMapper
              */
             "microsoft.apimanagement/service" => MapApiManagement( row ),
             "microsoft.keyvault/vaults" => MapKeyVault( row ),
+            "microsoft.network/networkinterfaces" => MapNetworkInterface( row ),
+            "microsoft.network/privateendpoints" => MapPrivateEndpoint( row ),
             "microsoft.network/virtualnetworks" => MapVirtualNetwork( row ),
+            "microsoft.storage/storageaccounts" => MapStorageAccount( row ),
 
             /*
              * Types which are modelled, but carry no properties beyond the
@@ -60,13 +69,10 @@ public class ResourceMapper
             "microsoft.databricks/workspaces" => Basic<AzDatabricksWorkspace>( row ),
             "microsoft.insights/components" => Basic<AzApplicationInsights>( row ),
             "microsoft.managedidentity/userassignedidentities" => Basic<AzManagedIdentity>( row ),
-            "microsoft.network/networkinterfaces" => Basic<AzNetworkInterface>( row ),
             "microsoft.network/networksecuritygroups" => Basic<AzNetworkSecurityGroup>( row ),
-            "microsoft.network/privateendpoints" => Basic<AzPrivateEndpoint>( row ),
             "microsoft.network/routetables" => Basic<AzRouteTable>( row ),
             "microsoft.sql/servers" => Basic<AzSqlServer>( row ),
             "microsoft.sql/servers/databases" => Basic<AzSqlDatabase>( row ),
-            "microsoft.storage/storageaccounts" => Basic<AzStorageAccount>( row ),
 
             _ => Basic<AzResource>( row ),
         };
@@ -120,6 +126,186 @@ public class ResourceMapper
         }
 
         return service;
+    }
+
+
+    /// <summary />
+    private static AzResource MapStorageAccount( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var account = Basic<AzStorageAccount>( row );
+
+        account.Kind = row.Str( "kind" );
+        account.Sku = row.Obj( "sku" ).Str( "name" );
+        account.SkuTier = row.Obj( "sku" ).Str( "tier" );
+
+        account.AccessTier = properties.Str( "accessTier" );
+        account.PrimaryLocation = properties.Str( "primaryLocation" );
+        account.StatusOfPrimary = properties.Str( "statusOfPrimary" );
+        account.ProvisioningState = properties.Str( "provisioningState" );
+
+        account.SupportsHttpsTrafficOnly = properties.Bool( "supportsHttpsTrafficOnly" );
+        account.MinimumTlsVersion = properties.Str( "minimumTlsVersion" );
+        account.AllowBlobPublicAccess = properties.Bool( "allowBlobPublicAccess" );
+        account.AllowSharedKeyAccess = properties.Bool( "allowSharedKeyAccess" );
+        account.AllowCrossTenantReplication = properties.Bool( "allowCrossTenantReplication" );
+        account.DefaultToOAuthAuthentication = properties.Bool( "defaultToOAuthAuthentication" );
+        account.PublicNetworkAccess = properties.Str( "publicNetworkAccess" );
+        account.DnsEndpointType = properties.Str( "dnsEndpointType" );
+
+        account.IsHnsEnabled = properties.Bool( "isHnsEnabled" );
+        account.IsSftpEnabled = properties.Bool( "isSftpEnabled" );
+        account.IsNfsV3Enabled = properties.Bool( "isNfsV3Enabled" );
+        account.IsLocalUserEnabled = properties.Bool( "isLocalUserEnabled" );
+
+        var encryption = properties.Obj( "encryption" );
+
+        account.EncryptionKeySource = encryption.Str( "keySource" );
+        account.RequireInfrastructureEncryption = encryption.Bool( "requireInfrastructureEncryption" );
+        account.EncryptionKeyVaultUri = encryption.Obj( "keyvaultproperties" ).Str( "keyvaulturi" );
+        account.EncryptionKeyName = encryption.Obj( "keyvaultproperties" ).Str( "keyname" );
+
+        var acls = properties.Obj( "networkAcls" );
+
+        account.NetworkAclsDefaultAction = acls.Str( "defaultAction" );
+        account.NetworkAclsBypass = acls.Str( "bypass" );
+
+        foreach ( var rule in acls.Items( "ipRules" ) )
+        {
+            var value = rule.Str( "value" );
+
+            if ( value != null )
+                account.NetworkAclsIpRules.Add( value );
+        }
+
+        foreach ( var rule in acls.Items( "virtualNetworkRules" ) )
+        {
+            var id = rule.Str( "id" );
+
+            if ( id != null )
+                account.NetworkAclsVirtualNetworkRules.Add( id );
+        }
+
+        foreach ( var endpoint in properties.Obj( "primaryEndpoints" ).Pairs() )
+            account.PrimaryEndpoints[ endpoint.Key ] = endpoint.Value;
+
+        foreach ( var connection in properties.Items( "privateEndpointConnections" ) )
+        {
+            var id = connection.Obj( "properties" ).Obj( "privateEndpoint" ).Str( "id" );
+
+            if ( id != null )
+                account.PrivateEndpointIds.Add( id );
+        }
+
+        return account;
+    }
+
+
+    /// <summary />
+    private static AzResource MapNetworkInterface( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var nic = Basic<AzNetworkInterface>( row );
+
+        nic.MacAddress = properties.Str( "macAddress" );
+        nic.NicType = properties.Str( "nicType" );
+        nic.EnableAcceleratedNetworking = properties.Bool( "enableAcceleratedNetworking" );
+        nic.EnableIPForwarding = properties.Bool( "enableIPForwarding" );
+        nic.DisableTcpStateTracking = properties.Bool( "disableTcpStateTracking" );
+        nic.ProvisioningState = properties.Str( "provisioningState" );
+
+        var dns = properties.Obj( "dnsSettings" );
+
+        nic.DnsServers = dns.StrList( "dnsServers" );
+        nic.AppliedDnsServers = dns.StrList( "appliedDnsServers" );
+        nic.InternalDomainNameSuffix = dns.Str( "internalDomainNameSuffix" );
+
+        nic.NetworkSecurityGroupId = properties.Obj( "networkSecurityGroup" ).Str( "id" );
+        nic.VirtualMachineId = properties.Obj( "virtualMachine" ).Str( "id" );
+        nic.PrivateEndpointId = properties.Obj( "privateEndpoint" ).Str( "id" );
+
+        foreach ( var item in properties.Items( "ipConfigurations" ) )
+        {
+            var configuration = item.Obj( "properties" );
+
+            nic.IPConfigurations.Add( new AzNetworkInterfaceIPConfiguration
+            {
+                Id = item.Str( "id" ) ?? "",
+                Name = item.Str( "name" ) ?? "",
+                Type = IPConfigurationType,
+                PrivateIPAddress = configuration.Str( "privateIPAddress" ),
+                PrivateIPAllocationMethod = configuration.Str( "privateIPAllocationMethod" ),
+                PrivateIPAddressVersion = configuration.Str( "privateIPAddressVersion" ),
+                Primary = configuration.Bool( "primary" ),
+                SubnetId = configuration.Obj( "subnet" ).Str( "id" ),
+                PublicIPAddressId = configuration.Obj( "publicIPAddress" ).Str( "id" ),
+            } );
+        }
+
+        return nic;
+    }
+
+
+    /// <summary />
+    private static AzResource MapPrivateEndpoint( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var endpoint = Basic<AzPrivateEndpoint>( row );
+
+        endpoint.ProvisioningState = properties.Str( "provisioningState" );
+        endpoint.CustomNetworkInterfaceName = properties.Str( "customNetworkInterfaceName" );
+        endpoint.SubnetId = properties.Obj( "subnet" ).Str( "id" );
+
+        foreach ( var nic in properties.Items( "networkInterfaces" ) )
+        {
+            var id = nic.Str( "id" );
+
+            if ( id != null )
+                endpoint.NetworkInterfaceIds.Add( id );
+        }
+
+        /*
+         * A connection is manual when it had to be approved by the owner of the
+         * target rather than by whoever created the endpoint; the two are
+         * reported as separate collections.
+         */
+        MapConnections( endpoint, properties.Items( "privateLinkServiceConnections" ), false );
+        MapConnections( endpoint, properties.Items( "manualPrivateLinkServiceConnections" ), true );
+
+        foreach ( var config in properties.Items( "customDnsConfigs" ) )
+        {
+            endpoint.CustomDnsConfigs.Add( new AzPrivateEndpointDnsConfig
+            {
+                Fqdn = config.Str( "fqdn" ),
+                IPAddresses = config.StrList( "ipAddresses" ),
+            } );
+        }
+
+        return endpoint;
+    }
+
+
+    /// <summary />
+    private static void MapConnections( AzPrivateEndpoint endpoint, List<JsonElement> items, bool isManual )
+    {
+        foreach ( var item in items )
+        {
+            var properties = item.Obj( "properties" );
+            var state = properties.Obj( "privateLinkServiceConnectionState" );
+            var name = item.Str( "name" ) ?? "";
+
+            endpoint.Connections.Add( new AzPrivateEndpointConnection
+            {
+                Id = item.Str( "id" ) ?? endpoint.Id + "/privateLinkServiceConnections/" + name,
+                Name = name,
+                Type = ConnectionType,
+                PrivateLinkServiceId = properties.Str( "privateLinkServiceId" ),
+                GroupIds = properties.StrList( "groupIds" ),
+                Status = state.Str( "status" ),
+                StatusDescription = state.Str( "description" ),
+                IsManual = isManual,
+            } );
+        }
     }
 
 

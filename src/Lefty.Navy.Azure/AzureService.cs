@@ -38,7 +38,7 @@ public class AzureService
     /// </summary>
     private const string ResourceQuery = """
         resources
-        | project id, name, type, location, tags, resourceGroup, sku, properties
+        | project id, name, type, location, tags, resourceGroup, sku, kind, properties
         | order by id asc
         """;
 
@@ -118,6 +118,15 @@ public class AzureService
         }
 
         _logger.LogInformation( "read {Resources} resource(s) across {Groups} resource group(s)", resources.Count, groups.Count );
+
+
+        /*
+         * Storage account contents are not indexed by Resource Graph, and have
+         * to be read from the management plane one account at a time.
+         */
+        var accounts = resources.OfType<AzStorageAccount>().ToList();
+
+        await new StorageEnricher( _client, _logger ).Enrich( accounts );
 
 
         /*

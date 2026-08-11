@@ -92,6 +92,23 @@ internal static class JsonRow
 
 
     /// <summary />
+    /// <remarks>
+    /// The string members of an object whose keys are not known ahead of time.
+    /// </remarks>
+    public static IEnumerable<KeyValuePair<string, string>> Pairs( this JsonElement element )
+    {
+        if ( element.ValueKind != JsonValueKind.Object )
+            yield break;
+
+        foreach ( var property in element.EnumerateObject() )
+        {
+            if ( property.Value.ValueKind == JsonValueKind.String )
+                yield return new KeyValuePair<string, string>( property.Name, property.Value.GetString()! );
+        }
+    }
+
+
+    /// <summary />
     public static Dictionary<string, string> TagMap( this JsonElement element, string name )
     {
         var tags = new Dictionary<string, string>();

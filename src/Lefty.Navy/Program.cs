@@ -1,4 +1,4 @@
-﻿using Azure.Core;
+using Azure.Core;
 using Azure.Identity;
 using Lefty.Navy.Azure;
 using McMaster.Extensions.CommandLineUtils;
@@ -43,7 +43,7 @@ public class Program
 
         svc.AddOptions();
 
-        svc.AddSingleton<TokenCredential>( new DefaultAzureCredential() );
+        svc.AddSingleton<TokenCredential>( CredentialGet() );
         svc.AddTransient<AzureService>();
 
         var sp = svc.BuildServiceProvider();
@@ -95,6 +95,35 @@ public class Program
 
             return 2;
         }
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// Deliberately not a plain DefaultAzureCredential. Its managed identity
+    /// source probes the instance metadata service at a link-local address
+    /// which, off an Azure host, is not refused but silently dropped: the probe
+    /// spends over two minutes in retries and then reports failure by throwing
+    /// AuthenticationFailedException rather than CredentialUnavailableException.
+    /// That is fatal to the chain, so no later source is ever consulted, and a
+    /// developer signed in through the Azure CLI is turned away.
+    /// <para>
+    /// Running the probe last rather than in the middle keeps that cost off
+    /// every machine which has some other way to authenticate, while leaving
+    /// managed identity available to a service which genuinely has nothing
+    /// else.
+    /// </para>
+    /// </remarks>
+    private static TokenCredential CredentialGet()
+    {
+        var options = new DefaultAzureCredentialOptions
+        {
+            ExcludeManagedIdentityCredential = true,
+        };
+
+        return new ChainedTokenCredential(
+            new DefaultAzureCredential( options ),
+            new ManagedIdentityCredential( new ManagedIdentityCredentialOptions() ) );
     }
 
 

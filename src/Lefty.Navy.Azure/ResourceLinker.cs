@@ -15,6 +15,15 @@ namespace Lefty.Navy.Azure;
 /// would turn the graph cyclic and make serialization fail on depth.
 /// </para>
 /// <para>
+/// Azure describes two of these relationships from both ends, and in each case
+/// only one end is resolved here. A private endpoint holds its network
+/// interfaces, so <see cref="AzNetworkInterface.PrivateEndpointId" /> stays an
+/// identifier; and a resource such as a key vault or a storage account holds
+/// the endpoints which front it, so
+/// <see cref="AzPrivateEndpointConnection.PrivateLinkServiceId" /> stays an
+/// identifier too. Resolving either would close a loop.
+/// </para>
+/// <para>
 /// A resolved object is shared rather than copied, so a subnet reached through
 /// an API Management service is the same instance as the one held by its
 /// virtual network. Serialization writes it out at both places.
@@ -74,6 +83,38 @@ public class ResourceLinker
 
             if ( resource is AzApiManagement service )
                 service.Subnet = SubnetLookup( subnetsById, service.SubnetId );
+
+            if ( resource is AzNetworkInterface nic )
+            {
+                nic.NetworkSecurityGroup = Lookup<AzNetworkSecurityGroup>( byId, nic.NetworkSecurityGroupId );
+
+                foreach ( var configuration in nic.IPConfigurations )
+                    configuration.Subnet = SubnetLookup( subnetsById, configuration.SubnetId );
+            }
+
+            if ( resource is AzPrivateEndpoint endpoint )
+            {
+                endpoint.Subnet = SubnetLookup( subnetsById, endpoint.SubnetId );
+
+                foreach ( var id in endpoint.NetworkInterfaceIds )
+                {
+                    var attached = Lookup<AzNetworkInterface>( byId, id );
+
+                    if ( attached != null )
+                        endpoint.NetworkInterfaces.Add( attached );
+                }
+            }
+
+            if ( resource is AzStorageAccount account )
+            {
+                foreach ( var id in account.PrivateEndpointIds )
+                {
+                    var linked = Lookup<AzPrivateEndpoint>( byId, id );
+
+                    if ( linked != null )
+                        account.PrivateEndpoints.Add( linked );
+                }
+            }
         }
     }
 
