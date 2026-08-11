@@ -93,6 +93,8 @@ public class ResourceMapper
             "microsoft.insights/metricalerts" => MapMetricAlertRule( row ),
             "microsoft.keyvault/vaults" => MapKeyVault( row ),
             "microsoft.managedidentity/userassignedidentities" => MapManagedIdentity( row ),
+            "microsoft.netapp/netappaccounts" => MapNetAppAccount( row ),
+            "microsoft.netapp/netappaccounts/capacitypools" => MapNetAppCapacityPool( row ),
             "microsoft.netapp/netappaccounts/capacitypools/volumes" => MapVolume( row ),
             "microsoft.network/loadbalancers" => MapLoadBalancer( row ),
             "microsoft.network/networkinterfaces" => MapNetworkInterface( row ),
@@ -1235,12 +1237,77 @@ public class ResourceMapper
 
 
     /// <summary />
+    private static AzResource MapNetAppAccount( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var account = Basic<AzNetAppAccount>( row );
+
+        account.ProvisioningState = properties.Str( "provisioningState" );
+        account.MultiAdStatus = properties.Str( "multiADStatus" );
+        account.NfsV4IdDomain = properties.Str( "nfsV4IDDomain" );
+        account.DisableShowmount = properties.Bool( "disableShowmount" );
+
+        var encryption = properties.Obj( "encryption" );
+
+        account.EncryptionKeySource = encryption.Str( "keySource" );
+        account.EncryptionKeyVaultId = encryption.Obj( "keyVaultProperties" ).Str( "keyVaultResourceId" );
+        account.EncryptionKeyName = encryption.Obj( "keyVaultProperties" ).Str( "keyName" );
+        account.EncryptionKeyVaultUri = encryption.Obj( "keyVaultProperties" ).Str( "keyVaultUri" );
+        account.EncryptionIdentityId = encryption.Obj( "identity" ).Str( "userAssignedIdentity" );
+
+        foreach ( var item in properties.Items( "activeDirectories" ) )
+        {
+            account.ActiveDirectories.Add( new AzNetAppDirectory
+            {
+                ActiveDirectoryId = item.Str( "activeDirectoryId" ),
+                Domain = item.Str( "domain" ),
+                Username = item.Str( "username" ),
+                Dns = item.Str( "dns" ),
+                SmbServerName = item.Str( "smbServerName" ),
+                OrganizationalUnit = item.Str( "organizationalUnit" ),
+                Status = item.Str( "status" ),
+                AesEncryption = item.Bool( "aesEncryption" ),
+                LdapSigning = item.Bool( "ldapSigning" ),
+                LdapOverTls = item.Bool( "ldapOverTLS" ),
+                EncryptDCConnections = item.Bool( "encryptDCConnections" ),
+                AllowLocalNfsUsersWithLdap = item.Bool( "allowLocalNfsUsersWithLdap" ),
+            } );
+        }
+
+        return account;
+    }
+
+
+    /// <summary />
+    private static AzResource MapNetAppCapacityPool( JsonElement row )
+    {
+        var properties = row.Obj( "properties" );
+        var pool = Basic<AzNetAppCapacityPool>( row );
+
+        pool.NetAppAccountId = ParentOf( pool.Id, "/capacityPools/" );
+        pool.ProvisioningState = properties.Str( "provisioningState" );
+        pool.PoolId = properties.Str( "poolId" );
+
+        pool.ServiceLevel = properties.Str( "serviceLevel" );
+        pool.Size = properties.Long( "size" );
+        pool.QosType = properties.Str( "qosType" );
+        pool.TotalThroughputMibps = properties.Dbl( "totalThroughputMibps" );
+        pool.UtilizedThroughputMibps = properties.Dbl( "utilizedThroughputMibps" );
+        pool.CoolAccess = properties.Bool( "coolAccess" );
+        pool.EncryptionType = properties.Str( "encryptionType" );
+
+        return pool;
+    }
+
+
+    /// <summary />
     private static AzResource MapVolume( JsonElement row )
     {
         var properties = row.Obj( "properties" );
-        var volume = Basic<AzVolume>( row );
+        var volume = Basic<AzNetAppVolume>( row );
 
         volume.CapacityPoolId = ParentOf( volume.Id, "/volumes/" );
+        volume.NetAppAccountId = ParentOf( volume.CapacityPoolId ?? "", "/capacityPools/" );
         volume.ProvisioningState = properties.Str( "provisioningState" );
         volume.CreationToken = properties.Str( "creationToken" );
         volume.FileSystemId = properties.Str( "fileSystemId" );
@@ -1272,7 +1339,7 @@ public class ResourceMapper
 
         foreach ( var rule in properties.Obj( "exportPolicy" ).Items( "rules" ) )
         {
-            volume.ExportRules.Add( new AzVolumeExportRule
+            volume.ExportRules.Add( new AzNetAppVolumeExportRule
             {
                 RuleIndex = rule.Int( "ruleIndex" ),
                 AllowedClients = rule.Str( "allowedClients" ),

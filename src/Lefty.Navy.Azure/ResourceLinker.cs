@@ -24,8 +24,10 @@ namespace Lefty.Navy.Azure;
 /// identifier too. Resolving either would close a loop. The same holds for a
 /// route table, whose subnets stay identifiers because a subnet already holds
 /// its table; for a network security group, whose subnets and network
-/// interfaces stay identifiers for that same reason; and for a SQL database,
-/// whose server stays an identifier because the server holds its databases.
+/// interfaces stay identifiers for that same reason; for a SQL database, whose
+/// server stays an identifier because the server holds its databases; and for a
+/// NetApp volume and capacity pool, whose parents stay identifiers because each
+/// parent holds its children.
 /// </para>
 /// <para>
 /// A second reason to leave a reference unresolved is weight rather than
@@ -148,8 +150,8 @@ public class ResourceLinker
                 cluster.DiskEncryptionSet = Lookup<AzDiskEncryptionSet>( byId, cluster.DiskEncryptionSetId );
                 cluster.KubeletIdentity = Lookup<AzManagedIdentity>( byId, cluster.KubeletIdentityId );
 
-                foreach ( var pool in cluster.NodePools )
-                    pool.Subnet = SubnetLookup( subnetsById, pool.SubnetId );
+                foreach ( var nodePool in cluster.NodePools )
+                    nodePool.Subnet = SubnetLookup( subnetsById, nodePool.SubnetId );
             }
 
             if ( resource is AzVirtualMachineScaleSet scaleSet )
@@ -171,8 +173,39 @@ public class ResourceLinker
                     frontend.Subnet = SubnetLookup( subnetsById, frontend.SubnetId );
             }
 
-            if ( resource is AzVolume volume )
+            if ( resource is AzNetAppAccount netApp )
+            {
+                netApp.EncryptionKeyVault = Lookup<AzKeyVault>( byId, netApp.EncryptionKeyVaultId );
+                netApp.EncryptionIdentity = Lookup<AzManagedIdentity>( byId, netApp.EncryptionIdentityId );
+            }
+
+            /*
+             * NetApp reports its three levels flat, each naming its parent in
+             * its own identifier and none of them listing its children. Both
+             * relationships are assembled from the child, as a SQL database is
+             * attached to its server, which puts the hierarchy back together:
+             * account, capacity pool, volume.
+             */
+            if ( resource is AzNetAppCapacityPool pool && pool.NetAppAccountId != null )
+            {
+                if ( byId.TryGetValue( pool.NetAppAccountId, out var parent ) == true && parent is AzNetAppAccount host )
+                    host.CapacityPools.Add( pool );
+                else
+                    _logger.LogDebug( "capacity pool {Id} names a NetApp account which was not found", pool.Id );
+            }
+
+            if ( resource is AzNetAppVolume volume )
+            {
                 volume.Subnet = SubnetLookup( subnetsById, volume.SubnetId );
+
+                if ( volume.CapacityPoolId != null )
+                {
+                    if ( byId.TryGetValue( volume.CapacityPoolId, out var parent ) == true && parent is AzNetAppCapacityPool host )
+                        host.Volumes.Add( volume );
+                    else
+                        _logger.LogDebug( "volume {Id} names a capacity pool which was not found", volume.Id );
+                }
+            }
 
             /*
              * Every kind of alert rule names the groups it notifies, and the

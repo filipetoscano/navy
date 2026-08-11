@@ -201,7 +201,9 @@ public class ResourceMapperTest
     [InlineData( "Microsoft.ContainerService/managedClusters", typeof( AzKubernetesService ) )]
     [InlineData( "Microsoft.Compute/virtualMachineScaleSets", typeof( AzVirtualMachineScaleSet ) )]
     [InlineData( "Microsoft.Network/loadBalancers", typeof( AzLoadBalancer ) )]
-    [InlineData( "Microsoft.NetApp/netAppAccounts/capacityPools/volumes", typeof( AzVolume ) )]
+    [InlineData( "Microsoft.NetApp/netAppAccounts", typeof( AzNetAppAccount ) )]
+    [InlineData( "Microsoft.NetApp/netAppAccounts/capacityPools", typeof( AzNetAppCapacityPool ) )]
+    [InlineData( "Microsoft.NetApp/netAppAccounts/capacityPools/volumes", typeof( AzNetAppVolume ) )]
     public void DeclaredType_MapsToItsOwnClass( string type, Type expected )
     {
         var row = Row( $$"""

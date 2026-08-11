@@ -10,6 +10,7 @@ public class LoadBalancerAndVolumeTest
 {
     private const string BalancerId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/loadBalancers/lb-one";
     private const string MemberId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Compute/virtualMachineScaleSets/vmss-one/virtualMachines/7/networkInterfaces/vmss-one/ipConfigurations/ipconfig1";
+    private const string AccountId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.NetApp/netAppAccounts/anf-one";
     private const string PoolId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.NetApp/netAppAccounts/anf-one/capacityPools/pool-ultra";
     private const string SubnetId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet-one/subnets/snet-data";
 
@@ -130,7 +131,7 @@ public class LoadBalancerAndVolumeTest
     [Fact]
     public void Volume_IsFullyMapped()
     {
-        var volume = Map<AzVolume>( VolumeJson );
+        var volume = Map<AzNetAppVolume>( VolumeJson );
 
         Assert.Equal( PoolId, volume.CapacityPoolId );
         Assert.Equal( "Succeeded", volume.ProvisioningState );
@@ -163,7 +164,7 @@ public class LoadBalancerAndVolumeTest
     [Fact]
     public void Volume_SizeSurvivesLargeValues()
     {
-        var volume = Map<AzVolume>( VolumeJson );
+        var volume = Map<AzNetAppVolume>( VolumeJson );
 
         Assert.Equal( 53687091200L, volume.UsageThreshold );
         Assert.Equal( 1556473L, volume.MaximumNumberOfFiles );
@@ -174,7 +175,7 @@ public class LoadBalancerAndVolumeTest
     [Fact]
     public void Volume_ExportRulesAreMapped()
     {
-        var volume = Map<AzVolume>( VolumeJson );
+        var volume = Map<AzNetAppVolume>( VolumeJson );
 
         var rule = Assert.Single( volume.ExportRules );
 
@@ -194,7 +195,7 @@ public class LoadBalancerAndVolumeTest
     [Fact]
     public void Volume_SubnetIsResolved()
     {
-        var volume = Map<AzVolume>( VolumeJson );
+        var volume = Map<AzNetAppVolume>( VolumeJson );
         var network = Network();
 
         Linker.Link( [ volume, network ] );
@@ -203,7 +204,7 @@ public class LoadBalancerAndVolumeTest
 
         var json = JsonSerializer.Serialize<List<AzResource>>( [ volume, network ] );
 
-        Assert.Contains( "AzVolume", json );
+        Assert.Contains( "AzNetAppVolume", json );
     }
 
 
@@ -215,9 +216,189 @@ public class LoadBalancerAndVolumeTest
     [Fact]
     public void Volume_KeepsItsCompoundName()
     {
-        var volume = Map<AzVolume>( VolumeJson );
+        var volume = Map<AzNetAppVolume>( VolumeJson );
 
         Assert.Equal( "anf-one/pool-ultra/pvc-one", volume.Name );
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// The two ancestors of a volume are stated nowhere but in its identifier.
+    /// </remarks>
+    [Fact]
+    public void Volume_NamesItsPoolAndAccount()
+    {
+        var volume = Map<AzNetAppVolume>( VolumeJson );
+
+        Assert.Equal( PoolId, volume.CapacityPoolId );
+        Assert.Equal( AccountId, volume.NetAppAccountId );
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// An account which serves NFS without LDAP joins no directory and uses a
+    /// platform-managed key, which is the ordinary case and reports almost
+    /// nothing.
+    /// </remarks>
+    [Fact]
+    public void NetAppAccount_IsFullyMapped()
+    {
+        var account = Map<AzNetAppAccount>( AccountJson );
+
+        Assert.Equal( "anf-one", account.Name );
+        Assert.Equal( "Succeeded", account.ProvisioningState );
+        Assert.Equal( "Enabled", account.MultiAdStatus );
+        Assert.Equal( "Microsoft.NetApp", account.EncryptionKeySource );
+        Assert.Null( account.EncryptionKeyVaultId );
+        Assert.Null( account.EncryptionIdentityId );
+        Assert.Empty( account.ActiveDirectories );
+        Assert.False( account.DisableShowmount );
+    }
+
+
+    /// <summary />
+    [Fact]
+    public void NetAppAccount_WithCustomerKey_ResolvesTheVault()
+    {
+        var account = Map<AzNetAppAccount>( EncryptedAccountJson );
+        var vault = Map<AzKeyVault>( VaultJson );
+        var identity = Map<AzManagedIdentity>( IdentityJson );
+
+        Assert.Equal( "Microsoft.KeyVault", account.EncryptionKeySource );
+        Assert.Equal( "cmk-netapp", account.EncryptionKeyName );
+        Assert.Equal( "https://kv-one.vault.azure.net", account.EncryptionKeyVaultUri );
+
+        Linker.Link( [ account, vault, identity ] );
+
+        Assert.Same( vault, account.EncryptionKeyVault );
+        Assert.Same( identity, account.EncryptionIdentity );
+    }
+
+
+    /// <summary />
+    [Fact]
+    public void NetAppAccount_DirectoryIsMapped()
+    {
+        var account = Map<AzNetAppAccount>( EncryptedAccountJson );
+
+        var directory = Assert.Single( account.ActiveDirectories );
+
+        Assert.Equal( "corp.example.org", directory.Domain );
+        Assert.Equal( "anf-join", directory.Username );
+        Assert.Equal( "10.200.0.4,10.200.0.5", directory.Dns );
+        Assert.Equal( "ANF-SMB", directory.SmbServerName );
+        Assert.Equal( "OU=Storage,DC=corp,DC=example,DC=org", directory.OrganizationalUnit );
+        Assert.Equal( "InUse", directory.Status );
+        Assert.True( directory.AesEncryption );
+        Assert.True( directory.LdapSigning );
+        Assert.False( directory.LdapOverTls );
+        Assert.False( directory.AllowLocalNfsUsersWithLdap );
+    }
+
+
+    /// <summary />
+    [Fact]
+    public void CapacityPool_IsFullyMapped()
+    {
+        var pool = Map<AzNetAppCapacityPool>( PoolJson );
+
+        Assert.Equal( "anf-one/pool-ultra", pool.Name );
+        Assert.Equal( AccountId, pool.NetAppAccountId );
+        Assert.Equal( "Succeeded", pool.ProvisioningState );
+        Assert.Equal( "8f9780cd-a12c-3983-fae9-d68e872a59bf", pool.PoolId );
+
+        Assert.Equal( "Ultra", pool.ServiceLevel );
+        Assert.Equal( 5497558138880L, pool.Size );
+        Assert.Equal( "Auto", pool.QosType );
+        Assert.Equal( 640.0, pool.TotalThroughputMibps );
+        Assert.Equal( 301.5, pool.UtilizedThroughputMibps );
+        Assert.False( pool.CoolAccess );
+        Assert.Equal( "Single", pool.EncryptionType );
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// Azure reports the account, the pool and the volume as three unrelated
+    /// resources, each naming its parent only within its own identifier. The
+    /// linker puts the hierarchy back together from the children.
+    /// </remarks>
+    [Fact]
+    public void NetApp_HierarchyIsAssembled()
+    {
+        var account = Map<AzNetAppAccount>( AccountJson );
+        var pool = Map<AzNetAppCapacityPool>( PoolJson );
+        var volume = Map<AzNetAppVolume>( VolumeJson );
+        var other = Map<AzNetAppVolume>( VolumeJson.Replace( "pvc-one", "pvc-two" ) );
+
+        Linker.Link( [ account, pool, volume, other ] );
+
+        Assert.Same( pool, Assert.Single( account.CapacityPools ) );
+        Assert.Equal( 2, pool.Volumes.Count );
+        Assert.Same( volume, pool.Volumes[ 0 ] );
+
+        // Each child names its parent, and must not resolve it.
+        var json = JsonSerializer.Serialize<List<AzResource>>( [ account, pool, volume, other ] );
+
+        Assert.Contains( "anf-one/pool-ultra", json );
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// A volume whose pool is missing hangs off nothing, but is kept rather
+    /// than being discarded for having nowhere to attach.
+    /// </remarks>
+    [Fact]
+    public void Volume_WithoutItsPool_IsStillMapped()
+    {
+        var account = Map<AzNetAppAccount>( AccountJson );
+        var volume = Map<AzNetAppVolume>( VolumeJson );
+
+        Linker.Link( [ account, volume ] );
+
+        Assert.Equal( PoolId, volume.CapacityPoolId );
+        Assert.Equal( AccountId, volume.NetAppAccountId );
+        Assert.Equal( "pvc-one", volume.CreationToken );
+        Assert.Empty( account.CapacityPools );
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// A volume reaches its account through the pool, so the account must not
+    /// hold it a second time.
+    /// </remarks>
+    [Fact]
+    public void NetAppAccount_DoesNotHoldVolumesDirectly()
+    {
+        var account = Map<AzNetAppAccount>( AccountJson );
+        var pool = Map<AzNetAppCapacityPool>( PoolJson );
+        var volume = Map<AzNetAppVolume>( VolumeJson );
+
+        Linker.Link( [ account, pool, volume ] );
+
+        var json = JsonSerializer.Serialize<AzResource>( account );
+
+        Assert.Equal( 1, Occurrences( json, "\"CreationToken\":\"pvc-one\"" ) );
+    }
+
+
+    /// <summary />
+    private static int Occurrences( string text, string value )
+    {
+        var count = 0;
+        var at = text.IndexOf( value, StringComparison.Ordinal );
+
+        while ( at >= 0 )
+        {
+            count++;
+            at = text.IndexOf( value, at + value.Length, StringComparison.Ordinal );
+        }
+
+        return count;
     }
 
 
@@ -355,6 +536,106 @@ public class LoadBalancerAndVolumeTest
                 }
               }
             ]
+          }
+        }
+        """;
+
+    private const string AccountJson = """
+        {
+          "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.NetApp/netAppAccounts/anf-one",
+          "name": "anf-one",
+          "type": "microsoft.netapp/netappaccounts",
+          "location": "westeurope",
+          "properties": {
+            "encryption": { "keySource": "Microsoft.NetApp" },
+            "multiADStatus": "Enabled",
+            "provisioningState": "Succeeded"
+          }
+        }
+        """;
+
+    private const string PoolJson = """
+        {
+          "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.NetApp/netAppAccounts/anf-one/capacityPools/pool-ultra",
+          "name": "anf-one/pool-ultra",
+          "type": "microsoft.netapp/netappaccounts/capacitypools",
+          "location": "westeurope",
+          "properties": {
+            "coolAccess": false,
+            "encryptionType": "Single",
+            "poolId": "8f9780cd-a12c-3983-fae9-d68e872a59bf",
+            "provisioningState": "Succeeded",
+            "qosType": "Auto",
+            "serviceLevel": "Ultra",
+            "size": 5497558138880,
+            "totalThroughputMibps": 640.0,
+            "utilizedThroughputMibps": 301.5
+          }
+        }
+        """;
+
+    private const string EncryptedAccountJson = """
+        {
+          "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.NetApp/netAppAccounts/anf-two",
+          "name": "anf-two",
+          "type": "microsoft.netapp/netappaccounts",
+          "location": "westeurope",
+          "properties": {
+            "activeDirectories": [
+              {
+                "activeDirectoryId": "4a0f6b1c-1d2e-3f40-5a6b-7c8d9e0f1a2b",
+                "aesEncryption": true,
+                "allowLocalNfsUsersWithLdap": false,
+                "dns": "10.200.0.4,10.200.0.5",
+                "domain": "corp.example.org",
+                "ldapOverTLS": false,
+                "ldapSigning": true,
+                "organizationalUnit": "OU=Storage,DC=corp,DC=example,DC=org",
+                "smbServerName": "ANF-SMB",
+                "status": "InUse",
+                "username": "anf-join"
+              }
+            ],
+            "disableShowmount": true,
+            "encryption": {
+              "identity": {
+                "principalId": "8c9a1f2e-0b3d-4c5a-9e7f-1a2b3c4d5e6f",
+                "userAssignedIdentity": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-netapp"
+              },
+              "keySource": "Microsoft.KeyVault",
+              "keyVaultProperties": {
+                "keyName": "cmk-netapp",
+                "keyVaultResourceId": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv-one",
+                "keyVaultUri": "https://kv-one.vault.azure.net",
+                "status": "Created"
+              }
+            },
+            "nfsV4IDDomain": "corp.example.org",
+            "provisioningState": "Succeeded"
+          }
+        }
+        """;
+
+    private const string VaultJson = """
+        {
+          "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv-one",
+          "name": "kv-one",
+          "type": "Microsoft.KeyVault/vaults",
+          "location": "westeurope",
+          "properties": { "sku": { "name": "premium" }, "enablePurgeProtection": true }
+        }
+        """;
+
+    private const string IdentityJson = """
+        {
+          "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-netapp",
+          "name": "id-netapp",
+          "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+          "location": "westeurope",
+          "properties": {
+            "clientId": "b41d7c88-2f3a-4d19-8c60-7e5a9b0d1c23",
+            "principalId": "8c9a1f2e-0b3d-4c5a-9e7f-1a2b3c4d5e6f",
+            "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47"
           }
         }
         """;

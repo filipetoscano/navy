@@ -19,6 +19,9 @@ namespace Lefty.Navy.Model;
 [JsonDerivedType( typeof( AzLoadBalancer ), nameof( AzLoadBalancer ) )]
 [JsonDerivedType( typeof( AzManagedIdentity ), nameof( AzManagedIdentity ) )]
 [JsonDerivedType( typeof( AzMetricAlertRule ), nameof( AzMetricAlertRule ) )]
+[JsonDerivedType( typeof( AzNetAppAccount ), nameof( AzNetAppAccount ) )]
+[JsonDerivedType( typeof( AzNetAppCapacityPool ), nameof( AzNetAppCapacityPool ) )]
+[JsonDerivedType( typeof( AzNetAppVolume ), nameof( AzNetAppVolume ) )]
 [JsonDerivedType( typeof( AzNetworkInterface ), nameof( AzNetworkInterface ) )]
 [JsonDerivedType( typeof( AzNetworkSecurityGroup ), nameof( AzNetworkSecurityGroup ) )]
 [JsonDerivedType( typeof( AzPrivateEndpoint ), nameof( AzPrivateEndpoint ) )]
@@ -29,7 +32,6 @@ namespace Lefty.Navy.Model;
 [JsonDerivedType( typeof( AzStorageAccount ), nameof( AzStorageAccount ) )]
 [JsonDerivedType( typeof( AzVirtualMachineScaleSet ), nameof( AzVirtualMachineScaleSet ) )]
 [JsonDerivedType( typeof( AzVirtualNetwork ), nameof( AzVirtualNetwork ) )]
-[JsonDerivedType( typeof( AzVolume ), nameof( AzVolume ) )]
 public class AzResource
 {
     /// <summary />
