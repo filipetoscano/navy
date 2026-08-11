@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace Lefty.Navy;
 
 /// <summary />
-[Command( Name = "build", Description = "Builds an inventory" )]
+[Command( Name = "build", Description = "Builds an inventory for one subscription" )]
 public class BuildCommand
 {
     private readonly AzureService _svc;
@@ -60,7 +60,7 @@ public class BuildCommand
 
             if ( this.OutputFile != null )
             {
-                File.WriteAllText( this.OutputFile, json );
+                await File.WriteAllTextAsync( this.OutputFile, json, cancellationToken );
             }
             else
             {
