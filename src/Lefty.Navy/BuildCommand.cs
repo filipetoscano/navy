@@ -1,4 +1,4 @@
-﻿using Lefty.Navy.Azure;
+using Lefty.Navy.Azure;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel.DataAnnotations;
@@ -10,6 +10,11 @@ namespace Lefty.Navy;
 [Command( Name = "build", Description = "Builds an inventory" )]
 public class BuildCommand
 {
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        WriteIndented = true,
+    };
+
     private readonly AzureService _svc;
     private readonly ILogger<BuildCommand> _logger;
 
@@ -31,11 +36,20 @@ public class BuildCommand
     /// <summary />
     public async Task<int> OnExecuteAsync()
     {
-        var sub = await _svc.SubscriptionGet( this.Subscription! );
+        try
+        {
+            var sub = await _svc.SubscriptionGet( this.Subscription! );
 
-        var json = JsonSerializer.Serialize( sub );
-        Console.WriteLine( sub );
+            var json = JsonSerializer.Serialize( sub, Options );
+            Console.WriteLine( json );
 
-        return 0;
+            return 0;
+        }
+        catch ( AzureServiceException ex )
+        {
+            _logger.LogError( "{Message}", ex.Message );
+
+            return 1;
+        }
     }
 }

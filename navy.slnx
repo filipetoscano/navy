@@ -11,6 +11,7 @@
     <File Path="README.md" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Lefty.Navy.Azure.Tests/Lefty.Navy.Azure.Tests.csproj" />
     <Project Path="src/Lefty.Navy.Azure/Lefty.Navy.Azure.csproj" />
     <Project Path="src/Lefty.Navy.Model/Lefty.Navy.Model.csproj" Id="833c0e6c-d46a-4c75-af6f-3c405d897f32" />
     <Project Path="src/Lefty.Navy/Lefty.Navy.csproj" />

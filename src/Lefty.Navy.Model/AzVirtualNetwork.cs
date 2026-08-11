@@ -21,10 +21,16 @@ public class AzSubnet : AzChildResource
     public required string AddressPrefix { get; set; }
 
     /// <summary />
-    public required string NetworkSecurityGroupId { get; set; }
+    /// <remarks>
+    /// Null when the subnet has no network security group associated with it.
+    /// </remarks>
+    public string? NetworkSecurityGroupId { get; set; }
 
     /// <summary />
-    public required string RouteTableId { get; set; }
+    /// <remarks>
+    /// Null when the subnet has no route table associated with it.
+    /// </remarks>
+    public string? RouteTableId { get; set; }
 
 
     /// <summary />

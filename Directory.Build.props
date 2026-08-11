@@ -17,10 +17,10 @@
 
     <!-- Packaging properties -->
     <IsPackable>false</IsPackable>
-    <PackageDescription>.NET tool to managed Azure</PackageDescription>
+    <PackageDescription>.NET tool for Azure inventory</PackageDescription>
     <PackageIconUrl>https://media.githubusercontent.com/media/filipetoscano/navy/master/docs/img/icon.png</PackageIconUrl>
     <PackageIcon>icon.png</PackageIcon>
-    <PackageTags>azure;devops;rbac</PackageTags>
+    <PackageTags>azure;inventory</PackageTags>
 
     <!-- Debuging properties -->
     <IncludeSymbols>true</IncludeSymbols>

@@ -4,7 +4,6 @@ using Lefty.Navy.Azure;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Microsoft.Graph.Connections.Item.Items.Item.MicrosoftGraphExternalConnectorsAddActivities;
 using Serilog;
 using Serilog.Events;
 using System.Reflection;
@@ -28,7 +27,7 @@ public class Program
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .MinimumLevel.Override( "Lefty.Navy", isVerbose == true ? LogEventLevel.Debug : LogEventLevel.Information )
-            .WriteTo.Console()
+            .WriteTo.Console( standardErrorFromLevel: LogEventLevel.Verbose )
             .CreateLogger();
 
         var logger = Log.ForContext<Program>();
