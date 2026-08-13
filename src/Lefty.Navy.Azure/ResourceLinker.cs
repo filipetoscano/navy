@@ -48,6 +48,13 @@ namespace Lefty.Navy.Azure;
 /// an API Management service is the same instance as the one held by its
 /// virtual network. Serialization writes it out at both places.
 /// </para>
+/// <para>
+/// Linking is repeatable: running it over a graph which was already linked
+/// replaces what the previous run resolved rather than adding to it. That is
+/// what lets <see cref="InventoryLoader" /> stitch an inventory read back from
+/// a file, in which every resolved reference returned as a copy of the object
+/// it points at.
+/// </para>
 /// </remarks>
 public class ResourceLinker
 {
@@ -85,6 +92,15 @@ public class ResourceLinker
                 foreach ( var subnet in network.Subnets )
                     subnetsById.TryAdd( subnet.Id, subnet );
             }
+
+            /*
+             * Emptied here rather than as each collection is about to be
+             * filled, because several of them are filled from the far end of
+             * the relationship: clearing a NetApp account's capacity pools as
+             * one of its pools is attached would throw away the pools attached
+             * before it.
+             */
+            Reset( resource );
         }
 
         foreach ( var resource in resources )
@@ -289,6 +305,59 @@ public class ResourceLinker
                     _logger.LogDebug( "database {Id} names a server which was not found", database.Id );
             }
         }
+    }
+
+
+    /// <summary>
+    /// Discards whatever a previous link left on a resource, so that linking it
+    /// again resolves its references onto the objects this inventory holds
+    /// rather than adding a second set beside the ones already there.
+    /// </summary>
+    /// <remarks>
+    /// Only the collections are emptied. A reference held on its own is
+    /// overwritten by the link which follows, whether or not it was set before,
+    /// and a reference which no longer resolves is overwritten with null.
+    /// </remarks>
+    private static void Reset( AzResource resource )
+    {
+        if ( resource is AzPrivateEndpoint endpoint )
+            endpoint.NetworkInterfaces.Clear();
+
+        if ( resource is AzStorageAccount account )
+            account.PrivateEndpoints.Clear();
+
+        if ( resource is AzSqlServer server )
+        {
+            server.PrivateEndpoints.Clear();
+            server.Databases.Clear();
+        }
+
+        if ( resource is AzVirtualMachine machine )
+            machine.NetworkInterfaces.Clear();
+
+        if ( resource is AzWebSite site )
+            site.PrivateEndpoints.Clear();
+
+        if ( resource is AzCacheForRedis cache )
+            cache.PrivateEndpoints.Clear();
+
+        if ( resource is AzEventHubNamespace space )
+            space.PrivateEndpoints.Clear();
+
+        if ( resource is AzNetAppAccount netApp )
+            netApp.CapacityPools.Clear();
+
+        if ( resource is AzNetAppCapacityPool pool )
+            pool.Volumes.Clear();
+
+        if ( resource is AzActivityLogAlertRule activityRule )
+            activityRule.ActionGroups.Clear();
+
+        if ( resource is AzMetricAlertRule metricRule )
+            metricRule.ActionGroups.Clear();
+
+        if ( resource is AzSmartDetectorAlertRule detectorRule )
+            detectorRule.ActionGroups.Clear();
     }
 
 

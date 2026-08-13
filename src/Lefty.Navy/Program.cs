@@ -13,6 +13,7 @@ namespace Lefty.Navy;
 /// <summary />
 [Command( "navy", Description = "Azure Inventory" )]
 [Subcommand( typeof( BuildCommand ) )]
+[Subcommand( typeof( NetworkCommand ) )]
 [Subcommand( typeof( SplitCommand ) )]
 [VersionOptionFromMember( MemberName = nameof( GetVersion ) )]
 public class Program

@@ -170,6 +170,54 @@ public class ResourceLinkerTest
 
     /// <summary />
     /// <remarks>
+    /// An inventory read back from a file is linked a second time, over a graph
+    /// whose collections the first link already filled.
+    /// </remarks>
+    [Fact]
+    public void Link_RunTwice_DoesNotDuplicateReferences()
+    {
+        var machineId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-one";
+        var nicId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/networkInterfaces/nic-one";
+
+        var machine = Resource<AzVirtualMachine>( machineId, "Microsoft.Compute/virtualMachines" );
+        var nic = Resource<AzNetworkInterface>( nicId, "Microsoft.Network/networkInterfaces" );
+
+        machine.NetworkInterfaceIds = [ nicId ];
+
+        Linker.Link( [ machine, nic ] );
+        Linker.Link( [ machine, nic ] );
+
+        Assert.Same( nic, Assert.Single( machine.NetworkInterfaces ) );
+    }
+
+
+    /// <summary />
+    /// <remarks>
+    /// A relationship assembled from the far end is the one which a naive
+    /// clear would break: emptying a server's databases as each database is
+    /// attached would leave it holding only the last one.
+    /// </remarks>
+    [Fact]
+    public void Link_RunTwice_KeepsChildrenAssembledFromTheFarEnd()
+    {
+        var serverId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Sql/servers/sql-one";
+
+        var server = Resource<AzSqlServer>( serverId, "Microsoft.Sql/servers" );
+        var one = Resource<AzSqlDatabase>( serverId + "/databases/db-one", "Microsoft.Sql/servers/databases" );
+        var two = Resource<AzSqlDatabase>( serverId + "/databases/db-two", "Microsoft.Sql/servers/databases" );
+
+        one.ServerId = serverId;
+        two.ServerId = serverId;
+
+        Linker.Link( [ server, one, two ] );
+        Linker.Link( [ server, one, two ] );
+
+        Assert.Equal( 2, server.Databases.Count );
+    }
+
+
+    /// <summary />
+    /// <remarks>
     /// The linked graph is serialized inline, so it must stay acyclic.
     /// </remarks>
     [Fact]
