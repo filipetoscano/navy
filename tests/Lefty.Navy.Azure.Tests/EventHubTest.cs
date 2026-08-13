@@ -11,8 +11,8 @@ public class EventHubTest
     private const string EndpointId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/privateEndpoints/pe-one";
     private const string NamespaceId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.EventHub/namespaces/evhns-one";
 
-    private static readonly ResourceMapper Mapper = new( NullLogger.Instance );
-    private static readonly ResourceLinker Linker = new( NullLogger.Instance );
+    private static readonly ResourceMapper Mapper = new( NullLogger<ResourceMapper>.Instance );
+    private static readonly ResourceLinker Linker = new( NullLogger<ResourceLinker>.Instance );
 
 
     /// <summary />

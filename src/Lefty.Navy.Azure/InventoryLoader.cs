@@ -30,12 +30,14 @@ public class InventoryLoader
 {
     private const string EnvironmentTag = "Environment";
 
-    private readonly ILogger _logger;
+    private readonly ResourceLinker _linker;
+    private readonly ILogger<InventoryLoader> _logger;
 
 
     /// <summary />
-    public InventoryLoader( ILogger logger )
+    public InventoryLoader( ResourceLinker linker, ILogger<InventoryLoader> logger )
     {
+        _linker = linker;
         _logger = logger;
     }
 
@@ -79,7 +81,7 @@ public class InventoryLoader
         _logger.LogInformation( "loaded {Subscription} with {Groups} resource group(s) and {Resources} resource(s)",
             subscription.Name, subscription.ResourceGroups?.Count ?? 0, resources.Count );
 
-        new ResourceLinker( _logger ).Link( resources );
+        _linker.Link( resources );
 
         return new Inventory
         {

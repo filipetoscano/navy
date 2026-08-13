@@ -28,11 +28,11 @@ public class StorageEnricher
     private const int Parallelism = 8;
 
     private readonly ArmClient _client;
-    private readonly ILogger _logger;
+    private readonly ILogger<StorageEnricher> _logger;
 
 
     /// <summary />
-    public StorageEnricher( ArmClient client, ILogger logger )
+    public StorageEnricher( ArmClient client, ILogger<StorageEnricher> logger )
     {
         _client = client;
         _logger = logger;

@@ -26,11 +26,11 @@ public class EventHubEnricher
     private const int Parallelism = 8;
 
     private readonly ArmClient _client;
-    private readonly ILogger _logger;
+    private readonly ILogger<EventHubEnricher> _logger;
 
 
     /// <summary />
-    public EventHubEnricher( ArmClient client, ILogger logger )
+    public EventHubEnricher( ArmClient client, ILogger<EventHubEnricher> logger )
     {
         _client = client;
         _logger = logger;

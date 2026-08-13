@@ -15,7 +15,8 @@ public class InventoryLoaderTest
     private const string EndpointId = Providers + "/Microsoft.Network/privateEndpoints/pe-one";
     private const string VaultId = Providers + "/Microsoft.KeyVault/vaults/kv-one";
 
-    private static readonly InventoryLoader Loader = new( NullLogger.Instance );
+    private static readonly ResourceLinker Linker = new( NullLogger<ResourceLinker>.Instance );
+    private static readonly InventoryLoader Loader = new( Linker, NullLogger<InventoryLoader>.Instance );
 
 
     /// <summary />
@@ -120,7 +121,7 @@ public class InventoryLoaderTest
     {
         var subscription = Subscription();
 
-        new ResourceLinker( NullLogger.Instance ).Link( [ .. ( subscription.ResourceGroups ?? [] ).SelectMany( x => x.Resources ?? [] ) ] );
+        Linker.Link( [ .. ( subscription.ResourceGroups ?? [] ).SelectMany( x => x.Resources ?? [] ) ] );
 
         return JsonSerializer.Serialize( subscription, new JsonSerializerOptions { WriteIndented = true } );
     }

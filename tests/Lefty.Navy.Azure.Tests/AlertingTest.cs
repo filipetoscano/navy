@@ -11,8 +11,8 @@ public class AlertingTest
     private const string GroupId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/ag-critical";
     private const string ComponentId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Insights/components/appi-one";
 
-    private static readonly ResourceMapper Mapper = new( NullLogger.Instance );
-    private static readonly ResourceLinker Linker = new( NullLogger.Instance );
+    private static readonly ResourceMapper Mapper = new( NullLogger<ResourceMapper>.Instance );
+    private static readonly ResourceLinker Linker = new( NullLogger<ResourceLinker>.Instance );
 
 
     /// <summary />

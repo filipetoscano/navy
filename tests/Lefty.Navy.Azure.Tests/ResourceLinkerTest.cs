@@ -12,7 +12,7 @@ public class ResourceLinkerTest
     private const string RouteTableId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/routeTables/rt-one";
     private const string EndpointId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/privateEndpoints/pe-one";
 
-    private static readonly ResourceLinker Linker = new( NullLogger.Instance );
+    private static readonly ResourceLinker Linker = new( NullLogger<ResourceLinker>.Instance );
 
 
     /// <summary />

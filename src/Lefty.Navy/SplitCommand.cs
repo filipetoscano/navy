@@ -11,12 +11,14 @@ namespace Lefty.Navy;
 [Command( Name = "split", Description = "Splits an inventory into an environment" )]
 public class SplitCommand
 {
+    private readonly InventoryLoader _loader;
     private readonly ILogger<SplitCommand> _logger;
 
 
     /// <summary />
-    public SplitCommand( ILogger<SplitCommand> logger )
+    public SplitCommand( InventoryLoader loader, ILogger<SplitCommand> logger )
     {
+        _loader = loader;
         _logger = logger;
     }
 
@@ -50,7 +52,7 @@ public class SplitCommand
 
         try
         {
-            inventory = await new InventoryLoader( _logger ).LoadAsync( this.InputFile!, cancellationToken );
+            inventory = await _loader.LoadAsync( this.InputFile!, cancellationToken );
         }
         catch ( AzureServiceException ex )
         {
@@ -115,6 +117,15 @@ public class SplitCommand
                 var name1 = rr.Name.Replace( p1, "-env-" );
                 var name2 = rr.Name.Replace( p2, "env" );
 
+                if ( rr is AzNetworkInterface )
+                    continue;
+
+                if ( rr is AzPrivateEndpoint )
+                    continue;
+
+                if ( rr is AzSqlDatabase )
+                    continue;
+
                 if ( rr is AzKeyVault kv )
                 {
                     var peIp = ToIp( kv.PrivateEndpoint );
@@ -138,6 +149,17 @@ public class SplitCommand
                         Type = "StorageAccount",
                         sa.AllowSharedKeyAccess,
                         sa.AllowBlobPublicAccess,
+                        PrivateEndpointsIp = pe,
+                    };
+                }
+                else if ( rr is AzSqlServer ss )
+                {
+                    var pe = ss.PrivateEndpoints.Select( x => ToIp( x ) );
+
+                    obj = new
+                    {
+                        Name = name2,
+                        Type = "MssqlServer",
                         PrivateEndpointsIp = pe,
                     };
                 }

@@ -16,8 +16,8 @@ public class ApiManagementTest
     private const string ServiceId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim-one";
     private const string SubnetId = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet-one/subnets/snet-apim";
 
-    private static readonly ResourceMapper Mapper = new( NullLogger.Instance );
-    private static readonly ResourceLinker Linker = new( NullLogger.Instance );
+    private static readonly ResourceMapper Mapper = new( NullLogger<ResourceMapper>.Instance );
+    private static readonly ResourceLinker Linker = new( NullLogger<ResourceLinker>.Instance );
 
 
     /// <summary />

@@ -36,11 +36,11 @@ namespace Lefty.Navy.Azure;
 /// </remarks>
 public class NetworkLayout
 {
-    private readonly ILogger _logger;
+    private readonly ILogger<NetworkLayout> _logger;
 
 
     /// <summary />
-    public NetworkLayout( ILogger logger )
+    public NetworkLayout( ILogger<NetworkLayout> logger )
     {
         _logger = logger;
     }

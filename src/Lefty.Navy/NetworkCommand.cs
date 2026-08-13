@@ -12,12 +12,16 @@ namespace Lefty.Navy;
 [Command( Name = "network", Description = "Emits IP/resource network layout for an enviroment" )]
 public class NetworkCommand
 {
+    private readonly InventoryLoader _loader;
+    private readonly NetworkLayout _layout;
     private readonly ILogger<NetworkCommand> _logger;
 
 
     /// <summary />
-    public NetworkCommand( ILogger<NetworkCommand> logger )
+    public NetworkCommand( InventoryLoader loader, NetworkLayout layout, ILogger<NetworkCommand> logger )
     {
+        _loader = loader;
+        _layout = layout;
         _logger = logger;
     }
 
@@ -55,7 +59,7 @@ public class NetworkCommand
 
         try
         {
-            inventory = await new InventoryLoader( _logger ).LoadAsync( this.InputFile!, cancellationToken );
+            inventory = await _loader.LoadAsync( this.InputFile!, cancellationToken );
         }
         catch ( AzureServiceException ex )
         {
@@ -82,7 +86,7 @@ public class NetworkCommand
 
         _logger.LogInformation( "environment {Environment} spans {Count} resource group(s)", this.Environment, groups.Count );
 
-        var rows = new NetworkLayout( _logger ).Build( groups );
+        var rows = _layout.Build( groups );
 
 
         /*

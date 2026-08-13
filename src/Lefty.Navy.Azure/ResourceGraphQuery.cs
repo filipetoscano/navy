@@ -18,8 +18,15 @@ namespace Lefty.Navy.Azure;
 /// are retained until this instance is disposed, so callers must keep it alive
 /// for as long as they intend to read the rows.
 /// </para>
+/// <para>
+/// Constructed by the container rather than by the service which reads through
+/// it, which is what makes it visible outside this assembly. Disposal is not
+/// the container's: <see cref="AzureService" /> releases it as soon as the
+/// inventory has been assembled, because nothing which outlives that call still
+/// points into the buffers.
+/// </para>
 /// </remarks>
-internal class ResourceGraphQuery : IDisposable
+public class ResourceGraphQuery : IDisposable
 {
     /// <summary>
     /// Maximum number of rows which Resource Graph will return in a single page.
@@ -27,13 +34,13 @@ internal class ResourceGraphQuery : IDisposable
     private const int PageSize = 1000;
 
     private readonly ArmClient _client;
-    private readonly ILogger _logger;
+    private readonly ILogger<ResourceGraphQuery> _logger;
     private readonly List<JsonDocument> _documents = [];
     private TenantResource? _tenant;
 
 
     /// <summary />
-    public ResourceGraphQuery( ArmClient client, ILogger logger )
+    public ResourceGraphQuery( ArmClient client, ILogger<ResourceGraphQuery> logger )
     {
         _client = client;
         _logger = logger;

@@ -13,7 +13,7 @@ namespace Lefty.Navy.Tests;
 /// </remarks>
 public class ResourceMapperTest
 {
-    private static readonly ResourceMapper Mapper = new( NullLogger.Instance );
+    private static readonly ResourceMapper Mapper = new( NullLogger<ResourceMapper>.Instance );
 
 
     /// <summary />

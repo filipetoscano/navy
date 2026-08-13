@@ -1,5 +1,3 @@
-using Azure.Core;
-using Azure.ResourceManager;
 using Lefty.Navy.Model;
 using Microsoft.Extensions.Logging;
 
@@ -42,14 +40,22 @@ public class AzureService
         | order by id asc
         """;
 
-    private readonly ArmClient _client;
+    private readonly ResourceGraphQuery _query;
+    private readonly ResourceMapper _mapper;
+    private readonly StorageEnricher _storage;
+    private readonly EventHubEnricher _hubs;
+    private readonly ResourceLinker _linker;
     private readonly ILogger<AzureService> _logger;
 
 
     /// <summary />
-    public AzureService( TokenCredential credential, ILogger<AzureService> logger )
+    public AzureService( ResourceGraphQuery query, ResourceMapper mapper, StorageEnricher storage, EventHubEnricher hubs, ResourceLinker linker, ILogger<AzureService> logger )
     {
-        _client = new ArmClient( credential );
+        _query = query;
+        _mapper = mapper;
+        _storage = storage;
+        _hubs = hubs;
+        _linker = linker;
         _logger = logger;
     }
 
@@ -70,7 +76,12 @@ public class AzureService
     /// </param>
     public async Task<AzSubscription> SubscriptionGetAsync( string subscriptionName, bool stitch, CancellationToken cancellationToken = default )
     {
-        using var query = new ResourceGraphQuery( _client, _logger );
+        /*
+         * Released here rather than by the container: every row read through it
+         * is a view over a buffer which it owns, and nothing which outlives this
+         * call still points into them.
+         */
+        using var query = _query;
 
         var subscription = await SubscriptionResolve( query, subscriptionName, cancellationToken );
         var subscriptionId = subscription.Str( "subscriptionId" )!;
@@ -107,12 +118,11 @@ public class AzureService
          */
         var resourceRows = await query.Execute( "resources", ResourceQuery, subscriptionId, cancellationToken );
 
-        var mapper = new ResourceMapper( _logger );
         var resources = new List<AzResource>();
 
         foreach ( var row in resourceRows )
         {
-            var resource = mapper.Map( row );
+            var resource = _mapper.Map( row );
             var groupName = row.Str( "resourceGroup" ) ?? "";
 
             resources.Add( resource );
@@ -137,18 +147,18 @@ public class AzureService
          */
         var accounts = resources.OfType<AzStorageAccount>().ToList();
 
-        await new StorageEnricher( _client, _logger ).Enrich( accounts, cancellationToken );
+        await _storage.Enrich( accounts, cancellationToken );
 
         var namespaces = resources.OfType<AzEventHubNamespace>().ToList();
 
-        await new EventHubEnricher( _client, _logger ).Enrich( namespaces, cancellationToken );
+        await _hubs.Enrich( namespaces, cancellationToken );
 
 
         /*
          * Resolve references only once every resource is known.
          */
         if ( stitch == true )
-            new ResourceLinker( _logger ).Link( resources );
+            _linker.Link( resources );
         else
             _logger.LogDebug( "references between resources left unresolved" );
 

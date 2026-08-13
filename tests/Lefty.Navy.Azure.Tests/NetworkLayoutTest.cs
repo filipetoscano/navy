@@ -15,7 +15,7 @@ public class NetworkLayoutTest
     private const string EndpointId = Providers + "/Microsoft.Network/privateEndpoints/pe-one";
     private const string VaultId = Providers + "/Microsoft.KeyVault/vaults/kv-one";
 
-    private static readonly NetworkLayout Layout = new( NullLogger.Instance );
+    private static readonly NetworkLayout Layout = new( NullLogger<NetworkLayout>.Instance );
 
 
     /// <summary />
@@ -102,7 +102,7 @@ public class NetworkLayoutTest
             Resources = [ Network(), .. resources ],
         };
 
-        new ResourceLinker( NullLogger.Instance ).Link( group.Resources! );
+        new ResourceLinker( NullLogger<ResourceLinker>.Instance ).Link( group.Resources! );
 
         return [ group ];
     }

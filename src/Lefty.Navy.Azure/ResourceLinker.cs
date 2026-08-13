@@ -58,11 +58,11 @@ namespace Lefty.Navy.Azure;
 /// </remarks>
 public class ResourceLinker
 {
-    private readonly ILogger _logger;
+    private readonly ILogger<ResourceLinker> _logger;
 
 
     /// <summary />
-    public ResourceLinker( ILogger logger )
+    public ResourceLinker( ILogger<ResourceLinker> logger )
     {
         _logger = logger;
     }

@@ -1,5 +1,6 @@
 using Azure.Core;
 using Azure.Identity;
+using Azure.ResourceManager;
 using Lefty.Navy.Azure;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
@@ -46,7 +47,21 @@ public class Program
         svc.AddOptions();
 
         svc.AddSingleton<TokenCredential>( CredentialGet() );
+
+        /*
+         * One client for the process: it holds the pipeline which every
+         * management plane call goes through, and the token cache behind it.
+         */
+        svc.AddSingleton( sp => new ArmClient( sp.GetRequiredService<TokenCredential>() ) );
+
+        svc.AddTransient<ResourceGraphQuery>();
+        svc.AddTransient<ResourceMapper>();
+        svc.AddTransient<ResourceLinker>();
+        svc.AddTransient<StorageEnricher>();
+        svc.AddTransient<EventHubEnricher>();
         svc.AddTransient<AzureService>();
+        svc.AddTransient<InventoryLoader>();
+        svc.AddTransient<NetworkLayout>();
 
         var sp = svc.BuildServiceProvider();
 

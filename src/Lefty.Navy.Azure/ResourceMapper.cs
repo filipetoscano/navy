@@ -62,11 +62,11 @@ public class ResourceMapper
     /// <summary />
     private const string OutboundRuleType = "Microsoft.Network/loadBalancers/outboundRules";
 
-    private readonly ILogger _logger;
+    private readonly ILogger<ResourceMapper> _logger;
 
 
     /// <summary />
-    public ResourceMapper( ILogger logger )
+    public ResourceMapper( ILogger<ResourceMapper> logger )
     {
         _logger = logger;
     }
