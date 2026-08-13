@@ -23,7 +23,7 @@ public class BuildCommand
 
 
     /// <summary />
-    [Argument( 0 )]
+    [Argument( 0, Name = "subscription", Description = "Subscription name" )]
     [Required]
     public string? Subscription { get; set; }
 

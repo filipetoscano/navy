@@ -1,5 +1,4 @@
-﻿using Azure.ResourceManager.Network.Models;
-using Lefty.Navy.Azure;
+﻿using Lefty.Navy.Azure;
 using Lefty.Navy.Model;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Logging;
@@ -25,16 +24,15 @@ public class SplitCommand
 
 
     /// <summary />
-    [Argument( 0, Description = "Input file" )]
+    [Argument( 0, Name = "input", Description = "Input file" )]
     [Required]
     [FileExists]
     public string? InputFile { get; set; }
 
     /// <summary />
-    [Argument( 1, Description = "Environment" )]
+    [Argument( 1, Name = "env", Description = "Environment" )]
     [Required]
     public string? Environment { get; set; }
-
 
     /// <summary />
     [Option( "-o|--output-file", CommandOptionType.SingleValue, Description = "Output file" )]
