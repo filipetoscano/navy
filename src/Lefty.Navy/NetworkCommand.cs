@@ -2,6 +2,7 @@ using Lefty.Navy.Azure;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
+using Spectre.Console.Json;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 
@@ -97,7 +98,8 @@ public class NetworkCommand
             }
             else
             {
-                Console.WriteLine( json );
+                AnsiConsole.Write( new JsonText( json ) );
+                AnsiConsole.WriteLine();
             }
         }
         else
