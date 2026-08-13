@@ -1,4 +1,5 @@
-﻿using Lefty.Navy.Azure;
+﻿using Azure.ResourceManager.Network.Models;
+using Lefty.Navy.Azure;
 using Lefty.Navy.Model;
 using McMaster.Extensions.CommandLineUtils;
 using Microsoft.Extensions.Logging;
@@ -91,7 +92,7 @@ public class SplitCommand
         var p1 = $"-{env.Environment}-";
         var p2 = $"{env.Environment}";
 
-        foreach ( var rg in groups )
+        foreach ( var rg in groups.OrderBy( x => x.Name ) )
         {
             _logger.LogInformation( "{ResourceGroup} - {Count} resources", rg.Name, rg.Resources?.Count );
 
@@ -126,6 +127,16 @@ public class SplitCommand
                 if ( rr is AzSqlDatabase )
                     continue;
 
+                if ( rr is AzRouteTable )
+                    continue;
+
+                if ( rr is AzNetworkSecurityGroup )
+                    continue;
+
+
+                /*
+                 * Key vault
+                 */
                 if ( rr is AzKeyVault kv )
                 {
                     var peIp = ToIp( kv.PrivateEndpoint );
@@ -135,32 +146,132 @@ public class SplitCommand
                         Name = name1,
                         Type = "KeyVault",
                         kv.Sku,
-                        HasDiskEncryption = kv.EnabledForDiskEncryption,
+                        kv.EnabledForDiskEncryption,
+                        kv.EnableSoftDelete,
+                        kv.SoftDeleteRetentionInDays,
+                        kv.EnableRbacAuthorization,
+                        kv.EnablePurgeProtection,
                         PrivateEndpointIp = peIp,
                     };
                 }
+
+
+                /*
+                 * 
+                 */
+                else if ( rr is AzKubernetesService aks )
+                {
+                    obj = new
+                    {
+                        Name = name1,
+                        Type = "Aks",
+                        aks.SkuTier,
+                        aks.KubernetesVersion,
+                        SupportPlan = aks.SupportPlan == "AKSLongTermSupport" ? "LongTerm" : aks.SupportPlan,
+                        aks.EnableRbac,
+                        aks.DisableLocalAccounts,
+                        aks.EnableAzureRbac,
+                        NodePools = aks.NodePools.OrderBy( x => x.Name ).Select( x => new
+                        {
+                            x.Name,
+                            x.Mode,
+                            x.Count,
+                            x.VmSize,
+                            x.EnableAutoScaling,
+                            x.MinCount,
+                            x.MaxCount,
+                            x.MaxPods,
+                            x.EnableEncryptionAtHost,
+                            Subnet = x.Subnet != null ? new
+                            {
+                                Name = x.Subnet.Name.Replace( p1, "-env-" ),
+                                x.Subnet.AddressPrefix,
+                            } : null,
+                        } ),
+                    };
+                }
+
+
+                /*
+                 * Storage account, blob container
+                 */
                 else if ( rr is AzStorageAccount sa )
                 {
                     var pe = sa.PrivateEndpoints.Select( x => ToIp( x ) );
+                    var blobs = sa.BlobContainers.Select( x => new
+                    {
+                        x.Name,
+                        x.PublicAccess,
+                    } );
 
                     obj = new
                     {
                         Name = name2,
                         Type = "StorageAccount",
+                        sa.Kind,
+                        sa.Sku,
+                        sa.SkuTier,
+                        sa.AccessTier,
                         sa.AllowSharedKeyAccess,
                         sa.AllowBlobPublicAccess,
+                        Cmk = ToCmk( sa.EncryptionKeyVaultUri?.Replace( p1, "-env-" ), sa.EncryptionKeyName ),
+                        BlobContainers = blobs,
+                        HasPublicNetworkAccess = sa.PublicNetworkAccess != null,
                         PrivateEndpointsIp = pe,
                     };
                 }
-                else if ( rr is AzSqlServer ss )
+
+
+                /*
+                 * MSSQL server, and databases
+                 */
+                else if ( rr is AzSqlServer mssql )
                 {
-                    var pe = ss.PrivateEndpoints.Select( x => ToIp( x ) );
+                    var pe = mssql.PrivateEndpoints.Select( x => ToIp( x ) );
+                    var db = mssql.Databases.Select( x => new
+                    {
+                        x.Name,
+                        x.Sku,
+                        x.SkuTier,
+                        x.SkuCapacity,
+                        x.Collation,
+                        x.IsInfraEncryptionEnabled,
+                    } );
 
                     obj = new
                     {
-                        Name = name2,
+                        Name = name1,
                         Type = "MssqlServer",
+                        mssql.Version,
+                        mssql.EntraOnlyAuthentication,
+                        mssql.EntraAdministratorLogin,
                         PrivateEndpointsIp = pe,
+                    };
+                }
+
+                /*
+                 * Vnet, Snet, Route tables
+                 */
+                else if ( rr is AzVirtualNetwork vnet )
+                {
+                    obj = new
+                    {
+                        Name = name1,
+                        Type = "VirtualNetwork",
+                        vnet.AddressPrefixes,
+                        vnet.DnsServers,
+                        Subnets = vnet.Subnets.OrderBy( x => x.Name ).Select( x => new
+                        {
+                            Name = x.Name.Replace( p1, "-env-" ),
+                            x.AddressPrefix,
+                            RouteTable = x.RouteTable?.Name.Replace( p1, "-env-" ),
+                            RouteTableRoutes = x.RouteTable?.Routes.OrderBy( y => y.AddressPrefix ).Select( y => new
+                            {
+                                y.AddressPrefix,
+                                y.NextHopType,
+                                y.NextHopIpAddress,
+                            } ),
+                        } ),
                     };
                 }
                 else
@@ -168,7 +279,7 @@ public class SplitCommand
                     obj = new
                     {
                         Name = name1,
-                        Type = rr.Type,
+                        rr.Type,
                     };
                 }
 
@@ -192,6 +303,19 @@ public class SplitCommand
         }
 
         return 0;
+    }
+
+
+    /// <summary />
+    private string? ToCmk( string? encryptionKeySource, string? encryptionKeyName )
+    {
+        if ( encryptionKeySource == null )
+            return null;
+
+        if ( encryptionKeyName == null )
+            return null;
+
+        return encryptionKeySource + "/" + encryptionKeyName;
     }
 
 
