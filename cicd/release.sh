@@ -17,7 +17,7 @@ if ([ -h "${SCRIPT_PATH}" ]); then
   while([ -h "${SCRIPT_PATH}" ]); do cd "$(dirname "$SCRIPT_PATH")";
   SCRIPT_PATH=$(readlink "${SCRIPT_PATH}"); done
 fi
-cd "$(dirname ${SCRIPT_PATH})" > /dev/null
+cd "$(dirname "${SCRIPT_PATH}")" > /dev/null
 cd ..
 
 
@@ -26,7 +26,6 @@ cd ..
 # ------------------------------------------------------------------------
 if [ -z ${GITHUB_REF+x} ];      then die "GITHUB_REF is not set"; fi
 if [ -z ${GITHUB_TOKEN+x} ];    then die "GITHUB_TOKEN is not set"; fi
-if [ -z ${NUGET_APIKEY+x} ];    then die "NUGET_APIKEY is not set"; fi
 
 if [[ ${GITHUB_REF} != refs/tags/v* ]]; then die "Script only works for tags"; fi
 
@@ -42,23 +41,28 @@ dotnet clean   -c Release
 dotnet restore --packages .nuget
 dotnet build   -c Release --no-restore -p:Version=${VERSION}
 
+rm -rf tmp/win-x64
+dotnet publish -c Release --runtime=win-x64 --self-contained src/Lefty.Navy/Lefty.Navy.csproj -p:Version=${VERSION} -o tmp/win-x64
+
 
 #
-# Publish to nuget.org
+# Artifacts
 # ------------------------------------------------------------------------
 
-mkdir -p nupkg
-rm -f nupkg/*.*
+mkdir -p artifacts
+rm -f artifacts/*.zip
 
-dotnet pack    -c Release --no-restore --no-build src/Lefty.Navy -o nupkg -p:Version=${VERSION}
-
-dotnet nuget push "nupkg/*.nupkg" --api-key ${NUGET_APIKEY} --source=https://api.nuget.org/v3/index.json
+(
+    cd  tmp/win-x64
+    zip -qr  ../../artifacts/navy-win-x64-${VERSION}.zip  .
+)
 
 
 #
 # Release, including artifacts
 # ------------------------------------------------------------------------
 
-gh release create v${VERSION} --notes="Release v${VERSION}"
+gh release create v${VERSION} --notes="Release v${VERSION}" \
+   artifacts/navy-win-x64-${VERSION}.zip
 
 # eof
