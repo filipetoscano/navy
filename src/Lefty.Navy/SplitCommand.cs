@@ -112,7 +112,8 @@ public class SplitCommand
             {
                 dynamic obj;
 
-                var name1 = rr.Name.Replace( p1, "-env-" ).Replace( p2, "env" );
+                var name1 = rr.Name.Replace( p1, "-env-" );
+                var name2 = rr.Name.Replace( p2, "env" );
 
                 if ( rr is AzKeyVault kv )
                 {
@@ -125,6 +126,19 @@ public class SplitCommand
                         kv.Sku,
                         HasDiskEncryption = kv.EnabledForDiskEncryption,
                         PrivateEndpointIp = peIp,
+                    };
+                }
+                else if ( rr is AzStorageAccount sa )
+                {
+                    var pe = sa.PrivateEndpoints.Select( x => ToIp( x ) );
+
+                    obj = new
+                    {
+                        Name = name2,
+                        Type = "StorageAccount",
+                        sa.AllowSharedKeyAccess,
+                        sa.AllowBlobPublicAccess,
+                        PrivateEndpointsIp = pe,
                     };
                 }
                 else
